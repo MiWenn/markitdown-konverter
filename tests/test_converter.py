@@ -59,7 +59,8 @@ class JobPlanningTests(unittest.TestCase):
             b.write_bytes(b"%PDF")
             jobs = converter.build_jobs([a, b])
             self.assertEqual([j.target.name for j in jobs], ["a.md", "b.md"])
-            self.assertEqual(jobs[0].target.parent, folder)
+            # macOS: /var ist ein Symlink auf /private/var; build_jobs() nutzt resolve()
+            self.assertEqual(jobs[0].target.parent, folder.resolve())
 
     def test_build_jobs_output_dir_avoids_name_clash(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
