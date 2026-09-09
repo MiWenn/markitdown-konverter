@@ -27,7 +27,8 @@ jobs:
         include:
           - os: macos-latest
             arch: arm64
-          - os: macos-13
+          # macos-13 ist seit Dez. 2025 abgeschaltet; letztes GitHub-Intel-Image:
+          - os: macos-15-intel
             arch: x86_64
     steps:
       - name: Checkout

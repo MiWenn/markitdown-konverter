@@ -168,7 +168,7 @@ Workflow [macOS App](https://github.com/MiWenn/markitdown-konverter/actions/work
 | Runner | Ergebnis |
 | --- | --- |
 | `macos-latest` | Apple Silicon (`arm64`) |
-| `macos-13` | Intel (`x86_64`) |
+| `macos-15-intel` | Intel (`x86_64`; `macos-13` gibt es bei GitHub nicht mehr) |
 
 Auslöser: Push auf `main`, Pull Request, **Run workflow**, oder Tag `v1.0.0` (dann zusätzlich GitHub Release mit den DMGs).
 
