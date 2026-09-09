@@ -1,8 +1,10 @@
 # PDF zu Markdown
 
+**Von Micky Wenngatz.**
+
 Kleine macOS-App, die **PDF** (und Word, PowerPoint, Excel) lokal mit [Microsoft MarkItDown](https://github.com/microsoft/markitdown) nach Markdown wandelt. Keine Cloud, kein Azure Document Intelligence.
 
-Anzeige-Name der gepackten App: **PDF zu Markdown**.
+Anzeige-Name der gepackten App: **PDF zu Markdown**. Autor: **Micky Wenngatz** ([GitHub](https://github.com/MiWenn/markitdown-konverter)).
 
 ---
 

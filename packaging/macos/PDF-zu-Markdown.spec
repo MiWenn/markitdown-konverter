@@ -77,6 +77,8 @@ for dist in METADATA_DISTS:
     except Exception as exc:  # pragma: no cover
         print(f"WARN: copy_metadata({dist!r}) übersprungen: {exc}")
 
+datas.append((str(ROOT / "VERSION"), "."))
+
 icon_file = str(ICON_ICNS) if ICON_ICNS.is_file() else (str(ICON_PNG) if ICON_PNG.is_file() else None)
 
 a = Analysis(
@@ -151,7 +153,11 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": APP_NAME,
             "CFBundleDisplayName": APP_NAME,
-            "CFBundleGetInfoString": "Lokale PDF- und Office-Konvertierung nach Markdown",
+            "CFBundleGetInfoString": (
+                "PDF zu Markdown von Micky Wenngatz — "
+                "lokale PDF- und Office-Konvertierung mit Microsoft MarkItDown"
+            ),
+            "NSHumanReadableCopyright": "© Micky Wenngatz",
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "CFBundlePackageType": "APPL",

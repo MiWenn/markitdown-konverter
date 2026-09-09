@@ -25,6 +25,8 @@ except ImportError:  # pragma: no cover - GUI-Start
     raise SystemExit(1)
 
 APP_TITLE = "PDF zu Markdown"
+APP_AUTHOR = "Micky Wenngatz"
+APP_HOMEPAGE = "https://github.com/MiWenn/markitdown-konverter"
 FILE_TYPES = [
     ("Dokumente", "*.pdf *.docx *.pptx *.xlsx *.xls"),
     ("PDF", "*.pdf"),
@@ -37,6 +39,33 @@ FILE_TYPES = [
 
 def _is_macos() -> bool:
     return sys.platform == "darwin"
+
+
+def _read_version() -> str:
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "VERSION")
+    candidates.append(Path(__file__).resolve().parent / "VERSION")
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    return "1.0.1"
+
+
+def about_text() -> str:
+    return (
+        f"{APP_TITLE}\n"
+        f"von {APP_AUTHOR}\n"
+        f"Version {_read_version()}\n\n"
+        "Wandelt PDF, Word, PowerPoint und Excel auf diesem Mac nach Markdown um.\n\n"
+        "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
+        f"{APP_HOMEPAGE}"
+    )
 
 
 def reveal_in_finder(path: Path) -> None:
@@ -60,6 +89,7 @@ class ConverterApp(ctk.CTk):
         self._events: queue.Queue = queue.Queue()
 
         self._build()
+        self._bind_macos_about()
         self._check_backend()
         if initial_files:
             self._add_files(initial_files)
@@ -79,6 +109,21 @@ class ConverterApp(ctk.CTk):
             font=ctk.CTkFont(size=22, weight="bold"),
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(
+            header,
+            text="Über…",
+            width=80,
+            fg_color="transparent",
+            border_width=1,
+            command=self._show_about,
+        ).grid(row=0, column=1, sticky="e", padx=(12, 0))
+        ctk.CTkLabel(
+            header,
+            text=f"von {APP_AUTHOR}",
+            font=ctk.CTkFont(size=13),
+            anchor="w",
+            text_color=("gray25", "gray75"),
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         ctk.CTkLabel(
             header,
             text="PDF, Word, PowerPoint und Excel lokal mit Microsoft MarkItDown wandeln — ohne Cloud.",
@@ -86,7 +131,7 @@ class ConverterApp(ctk.CTk):
             justify="left",
             text_color=("gray30", "gray70"),
             anchor="w",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         files_box = ctk.CTkFrame(self)
         files_box.grid(row=1, column=0, sticky="nsew", padx=20, pady=8)
@@ -186,6 +231,17 @@ class ConverterApp(ctk.CTk):
         self.log.configure(state="disabled")
 
         self._on_mode_change(self.output_mode.get())
+
+    def _bind_macos_about(self) -> None:
+        if not _is_macos():
+            return
+        try:
+            self.createcommand("tkAboutDialog", self._show_about)
+        except tk.TclError:
+            pass
+
+    def _show_about(self) -> None:
+        messagebox.showinfo(f"Über {APP_TITLE}", about_text())
 
     def _check_backend(self) -> None:
         try:

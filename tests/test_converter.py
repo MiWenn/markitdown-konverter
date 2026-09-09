@@ -132,5 +132,20 @@ class FrozenMessageTests(unittest.TestCase):
         self.assertIn("GitHub", msg)
 
 
+class BrandingTests(unittest.TestCase):
+    def test_readme_and_app_name_the_author(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        app_src = (root / "app.py").read_text(encoding="utf-8")
+        spec = (root / "packaging" / "macos" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Micky Wenngatz", readme)
+        self.assertIn('APP_AUTHOR = "Micky Wenngatz"', app_src)
+        self.assertIn("Über…", app_src)
+        self.assertIn("NSHumanReadableCopyright", spec)
+        self.assertIn("Micky Wenngatz", spec)
+
+
 if __name__ == "__main__":
     unittest.main()
