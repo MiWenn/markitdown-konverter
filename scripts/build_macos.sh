@@ -49,6 +49,7 @@ source "$VENV/bin/activate"
 echo "==> Abhängigkeiten"
 python -m pip install --upgrade pip
 python -m pip install -r "$ROOT/requirements.txt" -r "$ROOT/requirements-build.txt"
+python -c "import tkinter, customtkinter, markitdown; print('tkinter+markitdown ok')"
 
 echo "==> Icon (.icns)"
 python "$ROOT/packaging/icons/generate_app_icon.py"

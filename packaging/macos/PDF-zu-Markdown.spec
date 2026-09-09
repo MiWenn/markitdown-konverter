@@ -21,25 +21,13 @@ VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 APP_NAME = "PDF zu Markdown"
 BUNDLE_ID = "de.miwenn.pdf-zu-markdown"
 
-# Pakete, deren Daten/Binaries/Submodule MarkItDown + GUI brauchen.
+# Nur Pakete mit Daten/Binaries, die PyInstaller sonst oft vergisst.
+# pandas/numpy/pdfminer haben eigene Hooks — collect_all würde deren Tests mitschleifen.
 COLLECT_PACKAGES = [
     "customtkinter",
-    "markitdown",
     "magika",
     "onnxruntime",
-    "pdfminer",
-    "pdfplumber",
-    "mammoth",
-    "pptx",
-    "openpyxl",
-    "xlrd",
-    "pandas",
-    "lxml",
-    "bs4",
-    "markdownify",
-    "charset_normalizer",
-    "PIL",
-    "numpy",
+    "markitdown",
 ]
 
 METADATA_DISTS = [
@@ -108,6 +96,11 @@ a = Analysis(
         "matplotlib",
         "pytest",
         "tkinter.test",
+        "numpy.tests",
+        "pandas.tests",
+        "onnxruntime.quantization",
+        "onnxruntime.datasets",
+        "onnxruntime.tools",
         "youtube_transcript_api",
         "speech_recognition",
         "pydub",
