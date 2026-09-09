@@ -117,5 +117,19 @@ class ConvertTests(unittest.TestCase):
         self.assertIn("nicht gefunden", str(ctx.exception).lower())
 
 
+class FrozenMessageTests(unittest.TestCase):
+    def test_dev_message_mentions_pip(self) -> None:
+        self.assertIn("pip install", converter.missing_markitdown_message())
+
+    def test_frozen_message_points_to_github(self) -> None:
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, "frozen", True, create=True):
+            msg = converter.missing_markitdown_message()
+        self.assertNotIn("pip install", msg)
+        self.assertIn("GitHub", msg)
+
+
 if __name__ == "__main__":
     unittest.main()

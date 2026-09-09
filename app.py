@@ -112,7 +112,10 @@ class ConverterApp(ctk.CTk):
 
         self.file_box = ctk.CTkTextbox(files_box, height=120, wrap="none")
         self.file_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.file_box.insert("1.0", "Noch keine Datei. „Auswählen…“ oder Dateien per Kommandozeile übergeben.")
+        hint = "Noch keine Datei. „Auswählen…“ wählen oder Dateien auf das App-Symbol ziehen."
+        if not getattr(sys, "frozen", False):
+            hint = "Noch keine Datei. „Auswählen…“ oder Dateien per Kommandozeile übergeben."
+        self.file_box.insert("1.0", hint)
         self.file_box.configure(state="disabled")
 
         out_box = ctk.CTkFrame(self)
@@ -402,6 +405,10 @@ def _argv_files(argv: Sequence[str]) -> list[Path]:
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):
+        import multiprocessing
+
+        multiprocessing.freeze_support()
     converter.check_python_version()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme("blue")
@@ -410,12 +417,15 @@ def main() -> int:
     try:
         app = ConverterApp(initial_files=initial)
     except tk.TclError as exc:
-        print(
-            "Kein Grafikdisplay gefunden.\n"
-            "Auf dem Mac: python3 app.py\n"
-            "Ohne Oberfläche: python3 converter.py datei.pdf",
-            file=sys.stderr,
-        )
+        if getattr(sys, "frozen", False):
+            print("Kein Grafikdisplay gefunden.", file=sys.stderr)
+        else:
+            print(
+                "Kein Grafikdisplay gefunden.\n"
+                "Auf dem Mac: python3 app.py\n"
+                "Ohne Oberfläche: python3 converter.py datei.pdf",
+                file=sys.stderr,
+            )
         print(exc, file=sys.stderr)
         return 1
     app.mainloop()
