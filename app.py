@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kleine macOS-taugliche Oberfläche für PDF/Office → Markdown."""
+"""Kleine Desktop-Oberfläche für PDF/Office → Markdown."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "1.0.1"
+    return "1.1.0"
 
 
 def about_text() -> str:
@@ -62,15 +62,22 @@ def about_text() -> str:
         f"{APP_TITLE}\n"
         f"von {APP_AUTHOR}\n"
         f"Version {_read_version()}\n\n"
-        "Wandelt PDF, Word, PowerPoint und Excel auf diesem Mac nach Markdown um.\n\n"
+        "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um.\n\n"
         "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
         f"{APP_HOMEPAGE}"
     )
 
 
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
 def reveal_in_finder(path: Path) -> None:
     if _is_macos():
         subprocess.run(["open", "-R", str(path)], check=False)
+        return
+    if _is_windows():
+        subprocess.run(["explorer", f"/select,{path}"], check=False)
         return
     folder = str(path.parent)
     if sys.platform.startswith("linux"):
@@ -90,6 +97,7 @@ class ConverterApp(ctk.CTk):
 
         self._build()
         self._bind_macos_about()
+        self._apply_window_icon()
         self._check_backend()
         if initial_files:
             self._add_files(initial_files)
@@ -192,10 +200,16 @@ class ConverterApp(ctk.CTk):
         )
         self.output_pick_btn.grid(row=2, column=2, padx=(0, 12), pady=(0, 8))
 
-        self.reveal_var = ctk.BooleanVar(value=_is_macos())
+        self.reveal_var = ctk.BooleanVar(value=_is_macos() or _is_windows())
+        if _is_windows():
+            reveal_label = "Im Explorer zeigen"
+        elif _is_macos():
+            reveal_label = "Im Finder zeigen (macOS)"
+        else:
+            reveal_label = "Im Ordner zeigen"
         ctk.CTkCheckBox(
             out_box,
-            text="Im Finder zeigen (macOS)",
+            text=reveal_label,
             variable=self.reveal_var,
         ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 12))
 
@@ -243,11 +257,29 @@ class ConverterApp(ctk.CTk):
     def _show_about(self) -> None:
         messagebox.showinfo(f"Über {APP_TITLE}", about_text())
 
+    def _apply_window_icon(self) -> None:
+        if not _is_windows():
+            return
+        candidates = []
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "app_icon.ico")
+        candidates.append(Path(__file__).resolve().parent / "packaging" / "icons" / "app_icon.ico")
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).with_name("app_icon.ico"))
+        for icon in candidates:
+            if icon.is_file():
+                try:
+                    self.iconbitmap(str(icon))
+                except tk.TclError:
+                    return
+                return
+
     def _check_backend(self) -> None:
         try:
             converter.check_python_version()
             converter.create_markitdown()
-            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Mac.")
+            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Gerät.")
         except converter.ConverterError as exc:
             self._set_status("MarkItDown fehlt oder ist unvollständig.")
             self._log(str(exc))

@@ -140,11 +140,20 @@ class BrandingTests(unittest.TestCase):
         spec = (root / "packaging" / "macos" / "PDF-zu-Markdown.spec").read_text(
             encoding="utf-8"
         )
+        win_spec = (root / "packaging" / "windows" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
         self.assertIn("Micky Wenngatz", readme)
         self.assertIn('APP_AUTHOR = "Micky Wenngatz"', app_src)
         self.assertIn("Über…", app_src)
         self.assertIn("NSHumanReadableCopyright", spec)
         self.assertIn("Micky Wenngatz", spec)
+        win_readme = (root / "packaging" / "windows" / "LIESMICH.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("version=version_file", win_spec)
+        self.assertIn("Micky Wenngatz", win_readme)
+        self.assertTrue((root / "packaging" / "icons" / "app_icon.ico").is_file())
 
 
 if __name__ == "__main__":

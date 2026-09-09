@@ -2,9 +2,9 @@
 
 **Von Micky Wenngatz.**
 
-Kleine macOS-App, die **PDF** (und Word, PowerPoint, Excel) lokal mit [Microsoft MarkItDown](https://github.com/microsoft/markitdown) nach Markdown wandelt. Keine Cloud, kein Azure Document Intelligence.
+Kleine Desktop-App für **macOS** und **Windows 11**, die **PDF** (und Word, PowerPoint, Excel) lokal mit [Microsoft MarkItDown](https://github.com/microsoft/markitdown) nach Markdown wandelt. Keine Cloud, kein Azure Document Intelligence.
 
-Anzeige-Name der gepackten App: **PDF zu Markdown**. Autor: **Micky Wenngatz** ([GitHub](https://github.com/MiWenn/markitdown-konverter)).
+Anzeige-Name: **PDF zu Markdown**. Autor: **Micky Wenngatz** ([GitHub](https://github.com/MiWenn/markitdown-konverter)).
 
 ---
 
@@ -28,7 +28,7 @@ Unsicher? Apple-Menü  → **Über diesen Mac**. Steht dort **Chip**, nimm `arm6
 
 **Solange es noch kein Release gibt — Actions:**
 
-1. Öffne [Actions → macOS App](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml).
+1. Öffne [Actions → App bauen](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml).
 2. Klicke auf den neuesten **grünen** Lauf.
 3. Unten unter **Artifacts** `PDF-zu-Markdown-macos-arm64` oder `…-x86_64` laden (ZIP von GitHub, darin liegt die `.dmg`).
 4. Du musst bei GitHub angemeldet sein. Artifacts bleiben etwa 90 Tage.
@@ -77,13 +77,56 @@ Gescannte PDFs ohne Textschicht liefern oft wenig oder keinen Text. MarkItDown m
 
 ---
 
+## Für Windows 11 — ohne Terminal (Doppelklick)
+
+Du brauchst **kein** Python und **kein** Terminal. Die fertige App kommt als ZIP von GitHub (64-Bit, übliche PCs).
+
+### 1. Herunterladen
+
+**Am einfachsten — Releases** (nach dem ersten Versions-Tag `v…`):
+
+1. Öffne [Releases](https://github.com/MiWenn/markitdown-konverter/releases).
+2. Lade `PDF-zu-Markdown-…-windows-x64.zip`.
+
+**Solange es noch kein Release gibt — Actions:**
+
+1. Öffne [Actions → App bauen](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml).
+2. Klicke auf den neuesten **grünen** Lauf.
+3. Unten unter **Artifacts** `PDF-zu-Markdown-windows-x64` laden.
+4. Du musst bei GitHub angemeldet sein. Artifacts bleiben etwa 90 Tage.
+
+Der Download ist groß: MarkItDown samt PDF- und Office-Unterstützung ist **offline** enthalten.
+
+### 2. Starten
+
+1. Das heruntergeladene ZIP mit der rechten Maustaste → **Alle extrahieren…** (nicht die .exe aus dem ZIP heraus starten).
+2. Ordner z. B. auf den Desktop legen.
+3. **PDF zu Markdown.exe** doppelklicken.
+
+### 3. Beim ersten Öffnen (SmartScreen)
+
+Windows warnt bei Programmen ohne Microsoft-Signatur. Das ist normal und **kein Virenfund**. Die App läuft nur auf deinem PC und sendet nichts in die Cloud.
+
+**Wenn „Windows hat den PC geschützt“ erscheint:**
+
+1. **Weitere Informationen** anklicken.
+2. **Trotzdem ausführen** wählen.
+
+Falls die Datei von einem Freund kommt und Windows sie weiter blockiert: Rechtsklick auf die `.exe` → **Eigenschaften** → unten **Zulassen** / **Unblock** → **OK**, dann erneut starten.
+
+### 4. Nutzen
+
+Wie auf dem Mac: **Auswählen…** → **Konvertieren**. Optional **Im Explorer zeigen**.
+
+---
+
 ## Was die App kann
 
 - Eine oder mehrere Dateien auswählen
 - Ausgabe automatisch vorschlagen: gleicher Ordner, gleicher Dateiname, Endung `.md`
 - Optional eigenen Zielpfad oder Zielordner wählen
 - Fortschritt und Fehlermeldungen im Protokoll anzeigen
-- Nach Erfolg die Datei im Finder zeigen (macOS)
+- Nach Erfolg die Datei im Finder (macOS) oder Explorer (Windows) zeigen
 
 Einstieg aus dem Quellcode: `app.py` (Oberfläche) oder `converter.py` (Terminal).
 
@@ -165,14 +208,27 @@ Das Skript legt eine Build-venv an, installiert `requirements.txt` plus `require
 
 ### Ohne eigenen Mac: GitHub Actions
 
-Workflow [macOS App](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml):
+Workflow [App bauen](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml):
 
 | Runner | Ergebnis |
 | --- | --- |
 | `macos-latest` | Apple Silicon (`arm64`) |
 | `macos-15-intel` | Intel (`x86_64`; `macos-13` gibt es bei GitHub nicht mehr) |
+| `windows-latest` | Windows 64-Bit (`.exe` im ZIP `PDF-zu-Markdown-windows-x64`) |
 
-Auslöser: Push auf `main`, Pull Request, **Run workflow**, oder Tag `v1.0.0` (dann zusätzlich GitHub Release mit den DMGs).
+Auslöser: Push auf `main`, Pull Request, **Run workflow**, oder Tag `v1.0.0` (dann zusätzlich GitHub Release).
+
+### Windows-App bauen (.exe)
+
+Auf einem Windows-11-PC:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
+```
+
+Ergebnis: `dist/PDF zu Markdown/PDF zu Markdown.exe` und `dist/PDF-zu-Markdown-<version>-windows-x64.zip`.
+
+Ohne eigenen Windows-PC den Workflow oben nutzen (Job **Build (windows-x64)**).
 
 ### Icon
 
@@ -185,21 +241,23 @@ pip install Pillow
 ./scripts/generate_icns.sh
 ```
 
-Quellen: `packaging/icons/generate_app_icon.py`, `generate_icns.py`. Auf dem Mac schreibt `iconutil` das `.icns`, sonst Pillow.
+Quellen: `packaging/icons/generate_app_icon.py`, `generate_icns.py`, `generate_ico.py`. Auf dem Mac schreibt `iconutil` das `.icns`, sonst Pillow. Windows nutzt `app_icon.ico`.
 
 ### Spezifikation
 
-- `packaging/macos/PDF-zu-Markdown.spec` — onedir-Bundle, MarkItDown-Extras, customtkinter, Magika/ONNX
-- `packaging/macos/entitlements.plist` — für späteres Codesigning (JIT / library validation)
+- `packaging/macos/PDF-zu-Markdown.spec` — macOS-onedir-Bundle
+- `packaging/windows/PDF-zu-Markdown.spec` — Windows-onedir (customtkinter + MarkItDown)
+- `packaging/macos/entitlements.plist` — für späteres Mac-Codesigning
 - Anzeige-Name: **PDF zu Markdown**
 - Bundle-ID: `de.miwenn.pdf-zu-markdown`
 
-Die App ist absichtlich **nicht** notarisiert. Gatekeeper-Hinweis siehe oben.
+Die Apps sind absichtlich **nicht** signiert. Gatekeeper- und SmartScreen-Hinweise siehe oben.
 
 ## Fehler, die oft vorkommen
 
 | Meldung | Was tun |
 | --- | --- |
+| „Windows hat den PC geschützt“ (SmartScreen) | Weitere Informationen → Trotzdem ausführen |
 | „kann nicht geöffnet werden“ / identifizierter Entwickler | Rechtsklick → Öffnen, oder Datenschutz & Sicherheit → Trotzdem öffnen |
 | MarkItDown ist nicht installiert (Quellcode) | venv aktivieren, dann `pip install -r requirements.txt` |
 | `optional dependency [pdf]` | dieselbe Installation; manuell: `pip install 'markitdown[pdf,docx,pptx,xlsx,xls]'` |

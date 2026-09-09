@@ -12,3 +12,4 @@ PY
 
 "$PYTHON" "$ROOT/packaging/icons/generate_app_icon.py"
 "$PYTHON" "$ROOT/packaging/icons/generate_icns.py"
+"$PYTHON" "$ROOT/packaging/icons/generate_ico.py"

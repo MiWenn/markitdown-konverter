@@ -14,3 +14,4 @@ build/
 .pytest_cache/
 .mypy_cache/
 *.md.bak
+packaging/windows/file_version_info.txt
