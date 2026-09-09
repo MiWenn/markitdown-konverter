@@ -1,0 +1,6 @@
+# GUI (läuft mit dem Tk, das bei python.org-Python auf dem Mac mitkommt)
+customtkinter>=5.2.0
+
+# Microsoft MarkItDown — nur lokale Konverter, ohne Azure/Cloud
+# PDF plus gängige Office-Formate (Word, PowerPoint, Excel)
+markitdown[pdf,docx,pptx,xlsx,xls]>=0.1.0
