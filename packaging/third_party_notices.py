@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Micky Wenngatz
 """Sammelt die Lizenztexte aller Pakete der Build-Umgebung in THIRD-PARTY-NOTICES.txt.
 
 Die meisten Open-Source-Lizenzen (MIT, BSD, Apache) verlangen, dass ihr Text bei
@@ -162,8 +164,27 @@ def main() -> int:
         if name and name.lower() not in BUILD_ONLY:
             dists.setdefault(name.lower(), dist)
 
+    own_license = (ROOT / "LICENSE").read_text(encoding="utf-8").strip()
     out = [
-        "PDF zu Markdown – Lizenzen der enthaltenen Open-Source-Bausteine",
+        "PDF zu Markdown – Lizenzen",
+        "=" * 66,
+        "",
+        "Teil 1: Diese App",
+        "-" * 66,
+        "",
+        "PDF zu Markdown",
+        "Copyright (C) 2026 Micky Wenngatz",
+        "",
+        "Dieses Programm ist freie Software: Sie können es unter den Bedingungen",
+        "der GNU General Public License Version 3, wie von der Free Software",
+        "Foundation veröffentlicht, weitergeben und/oder verändern.",
+        "Es wird OHNE JEDE GEWÄHRLEISTUNG bereitgestellt. Der Quellcode steht",
+        "unter https://github.com/MiWenn/markitdown-konverter.",
+        "",
+        own_license,
+        "",
+        "",
+        "Teil 2: Enthaltene Open-Source-Bausteine",
         "=" * 66,
         "",
         "Diese App enthält die folgenden Pakete. Ihre Lizenzen erlauben die",

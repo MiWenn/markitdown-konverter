@@ -134,4 +134,6 @@ Die App arbeitet vollständig offline. Deine Dokumente verlassen deinen Computer
 
 ## Lizenzen
 
-Die App ist ein kostenloses Geschenk von Micky Wenngatz. Sie baut auf Open-Source-Software auf, vor allem auf **Microsoft MarkItDown**. Die Lizenzen aller enthaltenen Bausteine findest du in der App unter **Über… → Lizenzen anzeigen**.
+Die App ist ein kostenloses Geschenk von Micky Wenngatz und **freie Software unter der GNU General Public License Version 3 (GPL-3.0)**. Du darfst sie nutzen, weitergeben und verändern. Wer eine veränderte Fassung weitergibt, muss deren Quellcode ebenfalls unter der GPL-3.0 offenlegen. Der Quellcode steht auf [GitHub](https://github.com/MiWenn/markitdown-konverter).
+
+Die App baut auf Open-Source-Software auf, vor allem auf **Microsoft MarkItDown**. Den vollständigen Lizenztext und die Lizenzen aller enthaltenen Bausteine findest du in der App unter **Über… → Lizenzen anzeigen**.
