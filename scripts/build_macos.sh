@@ -51,6 +51,9 @@ python -m pip install --upgrade pip
 python -m pip install -r "$ROOT/requirements.txt" -r "$ROOT/requirements-build.txt"
 python -c "import tkinter, customtkinter, markitdown; print('tkinter+markitdown ok')"
 
+echo "==> Lizenzhinweise"
+python "$ROOT/packaging/third_party_notices.py"
+
 echo "==> Icon (.icns)"
 python "$ROOT/packaging/icons/generate_app_icon.py"
 python "$ROOT/packaging/icons/generate_icns.py"
@@ -80,6 +83,7 @@ rm -rf "$STAGE"
 mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/${APP_NAME}.app"
 ln -s /Applications "$STAGE/Applications"
+cp "$ROOT/packaging/macos/ZUERST-LESEN.txt" "$STAGE/ZUERST LESEN.txt"
 # UDZO = komprimiertes lesbares Image, Doppelklick im Finder
 hdiutil create \
   -volname "$APP_NAME" \

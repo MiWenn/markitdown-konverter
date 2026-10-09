@@ -73,12 +73,49 @@ def about_text() -> str:
         "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
         "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
         "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
-        f"{APP_HOMEPAGE}"
+        f"{APP_HOMEPAGE}\n\n"
+        "Enthält Open-Source-Bausteine; deren Lizenzen siehe „Lizenzen anzeigen“."
     )
 
 
 def _is_windows() -> bool:
     return sys.platform == "win32"
+
+
+PROFILE_HINTS = {
+    "Standard": "Schlichtes Markdown für jeden Zweck, auch zum Einfügen oder Importieren in Notion.",
+    "Notizen & Wissensarchiv": (
+        "Mit Metadaten-Kopf (Titel, Quelle, Datum), den Obsidian, Logseq & Co. "
+        "als Eigenschaften der Notiz anzeigen."
+    ),
+    "KI & Recherche": (
+        "Mit Metadaten-Kopf und Seitenangaben [Seite 3]: gut zum Zitieren und "
+        "für ChatGPT, Claude oder eigene KI-Ablagen."
+    ),
+}
+
+NOTICES_FILE = "THIRD-PARTY-NOTICES.txt"
+
+
+def third_party_notices_path() -> Path | None:
+    """Lizenztexte der mitgelieferten Open-Source-Bausteine (beim App-Bau erzeugt)."""
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / NOTICES_FILE)
+    candidates.append(Path(__file__).resolve().parent / NOTICES_FILE)
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def open_with_default_app(path: Path) -> None:
+    if _is_macos():
+        subprocess.run(["open", "-t", str(path)], check=False)
+    elif _is_windows():
+        import os
+
+        os.startfile(str(path))  # noqa: S606 - öffnet nur unsere eigene Textdatei
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
 
 
 def reveal_in_finder(path: Path) -> None:
@@ -97,7 +134,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
     def __init__(self, initial_files: Sequence[Path] | None = None) -> None:
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("760x780")
+        self.geometry("780x820")
         self.minsize(640, 640)
 
         self.sources: list[Path] = []
@@ -210,39 +247,66 @@ class ConverterApp(ctk.CTk, _DnDBase):
         )
         self.output_pick_btn.grid(row=2, column=2, padx=(0, 12), pady=(0, 8))
 
-        self.images_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(
+        ctk.CTkLabel(out_box, text="Profil").grid(
+            row=3, column=0, sticky="w", padx=(12, 8), pady=(4, 2)
+        )
+        self.profile_menu = ctk.CTkOptionMenu(
             out_box,
-            text="Bilder als Dateien speichern (Ordner „…_bilder“ neben der Markdown-Datei)",
-            variable=self.images_var,
-        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
+            values=list(converter.PROFILES),
+            command=self._on_profile_change,
+            width=220,
+        )
+        self.profile_menu.grid(row=3, column=1, columnspan=2, sticky="w", pady=(4, 2))
+        self.profile_hint = ctk.CTkLabel(
+            out_box,
+            text="",
+            anchor="w",
+            justify="left",
+            wraplength=680,
+            text_color=("gray30", "gray70"),
+        )
+        self.profile_hint.grid(row=4, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
+
+        options = ctk.CTkFrame(out_box, fg_color="transparent")
+        options.grid(row=5, column=0, columnspan=3, sticky="ew", padx=12, pady=(0, 12))
+        options.grid_columnconfigure((0, 1), weight=1, uniform="optionen")
+
+        def option(text: str, variable, row: int, column: int, state: str = "normal") -> None:
+            ctk.CTkCheckBox(options, text=text, variable=variable, state=state).grid(
+                row=row, column=column, sticky="w", pady=3, padx=(0, 12)
+            )
+
+        self.images_var = ctk.BooleanVar(value=True)
+        option("Bilder als Dateien speichern", self.images_var, 0, 0)
 
         ocr_ok = converter.ocr_available()
         self.ocr_var = ctk.BooleanVar(value=ocr_ok)
-        ctk.CTkCheckBox(
-            out_box,
-            text=(
-                "Texterkennung (OCR) für gescannte PDFs"
-                if ocr_ok
-                else "Texterkennung (OCR) für gescannte PDFs – nicht verfügbar"
-            ),
-            variable=self.ocr_var,
-            state="normal" if ocr_ok else "disabled",
-        ).grid(row=4, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
+        option(
+            "Texterkennung für Scans" if ocr_ok else "Texterkennung (nur Mac)",
+            self.ocr_var,
+            1,
+            0,
+            "normal" if ocr_ok else "disabled",
+        )
 
-        self.reveal_var = ctk.BooleanVar(value=_is_macos())
         self.reveal_var = ctk.BooleanVar(value=_is_macos() or _is_windows())
         if _is_windows():
             reveal_label = "Im Explorer zeigen"
         elif _is_macos():
-            reveal_label = "Im Finder zeigen (macOS)"
+            reveal_label = "Im Finder zeigen"
         else:
             reveal_label = "Im Ordner zeigen"
-        ctk.CTkCheckBox(
-            out_box,
-            text=reveal_label,
-            variable=self.reveal_var,
-        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 12))
+        option(reveal_label, self.reveal_var, 2, 0)
+
+        self.frontmatter_var = ctk.BooleanVar()
+        option("Metadaten-Kopf (Titel, Quelle, Datum)", self.frontmatter_var, 0, 1)
+        self.page_markers_var = ctk.BooleanVar()
+        option("Seitenangaben [Seite 3] (PDF)", self.page_markers_var, 1, 1)
+        self.strip_headers_var = ctk.BooleanVar()
+        option("Kopf- und Fußzeilen entfernen (PDF)", self.strip_headers_var, 2, 1)
+
+        self.profile_menu.set(converter.DEFAULT_PROFILE)
+        self._on_profile_change(converter.DEFAULT_PROFILE)
 
         action = ctk.CTkFrame(self, fg_color="transparent")
         action.grid(row=3, column=0, sticky="ew", padx=20, pady=(4, 8))
@@ -277,6 +341,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
 
         self._on_mode_change(self.output_mode.get())
 
+    def _on_profile_change(self, name: str) -> None:
+        preset = converter.PROFILES[name]
+        self.frontmatter_var.set(preset["frontmatter"])
+        self.page_markers_var.set(preset["page_markers"])
+        self.strip_headers_var.set(preset["strip_headers"])
+        self.profile_hint.configure(text=PROFILE_HINTS.get(name, ""))
+
     def _bind_macos_about(self) -> None:
         if not _is_macos():
             return
@@ -286,7 +357,26 @@ class ConverterApp(ctk.CTk, _DnDBase):
             pass
 
     def _show_about(self) -> None:
-        messagebox.showinfo(f"Über {APP_TITLE}", about_text())
+        window = ctk.CTkToplevel(self)
+        window.title(f"Über {APP_TITLE}")
+        window.resizable(False, False)
+        window.transient(self)
+        ctk.CTkLabel(window, text=about_text(), justify="left", wraplength=420).pack(
+            padx=24, pady=(20, 12), anchor="w"
+        )
+        buttons = ctk.CTkFrame(window, fg_color="transparent")
+        buttons.pack(fill="x", padx=24, pady=(0, 20))
+        notices = third_party_notices_path()
+        ctk.CTkButton(
+            buttons,
+            text="Lizenzen anzeigen",
+            command=lambda: open_with_default_app(notices) if notices else None,
+            state="normal" if notices else "disabled",
+        ).pack(side="left")
+        ctk.CTkButton(buttons, text="Schließen", width=100, command=window.destroy).pack(
+            side="right"
+        )
+        window.after(50, window.grab_set)
 
     def _apply_window_icon(self) -> None:
         if not _is_windows():
@@ -496,7 +586,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self.progress.set(0)
         self._set_status(f"Starte {len(jobs)} Konvertierung(en)…")
         self._log("—")
-        options = {"extract_images": self.images_var.get(), "ocr": self.ocr_var.get()}
+        options = {
+            "extract_images": self.images_var.get(),
+            "ocr": self.ocr_var.get(),
+            "frontmatter": self.frontmatter_var.get(),
+            "page_markers": self.page_markers_var.get(),
+            "strip_headers": self.strip_headers_var.get(),
+        }
         worker = threading.Thread(target=self._run_jobs, args=(jobs, options), daemon=True)
         worker.start()
 
@@ -516,6 +612,8 @@ class ConverterApp(ctk.CTk, _DnDBase):
                 details.append(f"{report.ocr_pages} Seite(n) per Texterkennung")
             if report.images:
                 details.append(f"{report.images} Bild(er)")
+            if report.removed_lines:
+                details.append(f"{report.removed_lines} Kopf-/Fußzeile(n) entfernt")
             extra = f"  ({', '.join(details)})" if details else ""
             self._events.put(("log", f"    gespeichert: {report.target}{extra}"))
             for warning in report.warnings:

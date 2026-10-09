@@ -1,0 +1,30 @@
+PDF zu Markdown – von Micky Wenngatz
+=====================================
+
+1. Ziehe „PDF zu Markdown“ in diesem Fenster auf den Ordner „Programme“.
+
+2. Das erste Öffnen (nur einmal nötig):
+   Dein Mac warnt beim ersten Start, weil die App nicht bei Apple
+   registriert ist. Das ist normal und kein Virenfund.
+
+   - App im Ordner „Programme“ doppelklicken.
+   - Bei der Meldung „… wurde nicht geöffnet“ auf „Fertig“ klicken
+     (NICHT „In den Papierkorb legen“).
+   - Systemeinstellungen → Datenschutz & Sicherheit → ganz nach unten
+     scrollen → bei „PDF zu Markdown wurde blockiert“ auf
+     „Dennoch öffnen“ klicken → Passwort eingeben → noch einmal
+     „Dennoch öffnen“.
+
+   Ältere Macs (macOS 14 oder älter): App mit der rechten Maustaste
+   anklicken → „Öffnen“ → „Öffnen“.
+
+   Meldung „… ist beschädigt“? Im Programm Terminal eingeben:
+   xattr -dr com.apple.quarantine "/Applications/PDF zu Markdown.app"
+
+3. Danach startet die App ganz normal per Doppelklick.
+
+Ausführliche Anleitung mit allen Schritten:
+https://github.com/MiWenn/markitdown-konverter/blob/main/ANLEITUNG.md
+
+Die App arbeitet vollständig offline. Deine Dokumente verlassen den
+Computer nicht.

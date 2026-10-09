@@ -8,117 +8,11 @@ Anzeige-Name: **PDF zu Markdown**. Autor: **Micky Wenngatz** ([GitHub](https://g
 
 ---
 
-## Für den Mac — ohne Terminal (Doppelklick)
+## Herunterladen und installieren (ohne Terminal)
 
-Du brauchst **kein** Python und **kein** Terminal. Die fertige App kommt als Scheibe (`.dmg`) von GitHub.
+Die fertigen Apps für **Mac** und **Windows 11** gibt es unter [Releases](https://github.com/MiWenn/markitdown-konverter/releases). Kein Python, kein Terminal nötig.
 
-### 1. Richtige Datei wählen
-
-- **Apple-Chip** (M1, M2, M3, M4 — die meisten Macs ab 2020): Datei mit `arm64` im Namen
-- **Intel-Mac** (älter): Datei mit `x86_64` im Namen
-
-Unsicher? Apple-Menü  → **Über diesen Mac**. Steht dort **Chip**, nimm `arm64`. Steht **Prozessor**, nimm `x86_64`.
-
-### 2. Herunterladen
-
-**Am einfachsten — Releases** (nach dem ersten Versions-Tag `v…`):
-
-1. Öffne [Releases](https://github.com/MiWenn/markitdown-konverter/releases).
-2. Lade `PDF-zu-Markdown-…-macos-arm64.dmg` oder `…-x86_64.dmg`.
-
-**Solange es noch kein Release gibt — Actions:**
-
-1. Öffne [Actions → App bauen](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml).
-2. Klicke auf den neuesten **grünen** Lauf.
-3. Unten unter **Artifacts** `PDF-zu-Markdown-macos-arm64` oder `…-x86_64` laden (ZIP von GitHub, darin liegt die `.dmg`).
-4. Du musst bei GitHub angemeldet sein. Artifacts bleiben etwa 90 Tage.
-
-Der Download ist mehrere hundert Megabyte groß: MarkItDown samt PDF- und Office-Unterstützung ist **offline** in der App enthalten.
-
-### 3. Installieren
-
-1. Doppelklick auf die `.dmg`.
-2. Ziehe **PDF zu Markdown** auf den Ordner **Programme** (Applications).
-3. Die Scheibe im Finder auswerfen.
-
-### 4. Beim ersten Öffnen (Gatekeeper)
-
-Apple blockiert Programme, die nicht aus dem App Store kommen. Das ist normal und **kein Virenfund**. Die App läuft nur auf deinem Mac und sendet nichts in die Cloud.
-
-**So startest du sie das erste Mal:**
-
-1. Ordner **Programme** öffnen.
-2. **Nicht** doppelklicken.
-3. Die App **mit der rechten Maustaste** anklicken (oder Control-Taste halten und klicken).
-4. **Öffnen** wählen.
-5. Im Hinweis erneut **Öffnen** bestätigen.
-
-Ab dann reicht ein normaler Doppelklick.
-
-Falls macOS (z. B. Sequoia oder Tahoe) die App trotzdem sperrt:
-
-1. **Systemeinstellungen** → **Datenschutz & Sicherheit**
-2. Nach unten zum Hinweis über die blockierte App scrollen
-3. **Trotzdem öffnen** wählen
-
-Die App ist **nicht** mit einem Apple-Entwicklerzertifikat signiert (kein Notarization). Deshalb erscheint die Warnung. Wer später signieren will, braucht ein Apple-Developer-Konto; die Build-Skripte sind darauf vorbereitet (`packaging/macos/entitlements.plist`).
-
-### 5. Nutzen
-
-1. App öffnen.
-2. Dateien oder Ordner **ins Fenster ziehen** oder **Auswählen…** klicken: PDF, Word (`.docx`), PowerPoint (`.pptx`) oder Excel (`.xlsx` / `.xls`). Mehrere Dateien gehen.
-3. Ausgabe: **Neben Quelle** (Standard) oder **Ziel wählen**.
-4. **Konvertieren**.
-5. Die `.md`-Datei liegt neben dem Original bzw. im gewählten Ordner. Optional **Im Finder zeigen**.
-
-Dateien lassen sich auch auf das App-Symbol ziehen.
-
-Bilder landen im Ordner `…_bilder` neben der Markdown-Datei. Gescannte PDFs liest die App mit der Texterkennung von macOS.
-
----
-
-## Für Windows 11 — ohne Terminal (Doppelklick)
-
-Du brauchst **kein** Python und **kein** Terminal. Die fertige App kommt als ZIP von GitHub (64-Bit, übliche PCs).
-
-### 1. Herunterladen
-
-**Am einfachsten — Releases** (nach dem ersten Versions-Tag `v…`):
-
-1. Öffne [Releases](https://github.com/MiWenn/markitdown-konverter/releases).
-2. Lade `PDF-zu-Markdown-…-windows-x64.zip`.
-
-**Solange es noch kein Release gibt — Actions:**
-
-1. Öffne [Actions → App bauen](https://github.com/MiWenn/markitdown-konverter/actions/workflows/macos-app.yml).
-2. Klicke auf den neuesten **grünen** Lauf.
-3. Unten unter **Artifacts** `PDF-zu-Markdown-windows-x64` laden.
-4. Du musst bei GitHub angemeldet sein. Artifacts bleiben etwa 90 Tage.
-
-Der Download ist groß: MarkItDown samt PDF- und Office-Unterstützung ist **offline** enthalten.
-
-### 2. Starten
-
-1. Das heruntergeladene ZIP mit der rechten Maustaste → **Alle extrahieren…** (nicht die .exe aus dem ZIP heraus starten).
-2. Ordner z. B. auf den Desktop legen.
-3. **PDF zu Markdown.exe** doppelklicken.
-
-### 3. Beim ersten Öffnen (SmartScreen)
-
-Windows warnt bei Programmen ohne Microsoft-Signatur. Das ist normal und **kein Virenfund**. Die App läuft nur auf deinem PC und sendet nichts in die Cloud.
-
-**Wenn „Windows hat den PC geschützt“ erscheint:**
-
-1. **Weitere Informationen** anklicken.
-2. **Trotzdem ausführen** wählen.
-
-Falls die Datei von einem Freund kommt und Windows sie weiter blockiert: Rechtsklick auf die `.exe` → **Eigenschaften** → unten **Zulassen** / **Unblock** → **OK**, dann erneut starten.
-
-### 4. Nutzen
-
-Wie auf dem Mac: Dateien ins Fenster ziehen oder **Auswählen…** → **Konvertieren**. Optional **Im Explorer zeigen**.
-
-Unterschied zum Mac: Die **Texterkennung für gescannte PDFs** gibt es unter Windows nicht (sie nutzt eine Mac-Funktion). Bei Scans erscheint ein Hinweis im Protokoll.
+Beim ersten Öffnen warnen Mac und Windows, weil die App nicht signiert ist. Wie man das einmalig bestätigt, steht Schritt für Schritt in der **[Anleitung](ANLEITUNG.md)**. Die Anleitung liegt auch der Mac-DMG („ZUERST LESEN“) und dem Windows-Ordner („LIESMICH“) bei.
 
 ---
 
@@ -186,7 +80,8 @@ python3 converter.py bericht.pdf -o ~/Desktop/bericht.md
 
 1. Dateien oder Ordner **ins Fenster ziehen** oder **Auswählen…** klicken.
 2. Ausgabe: **Neben Quelle** (Standard) oder **Ziel wählen**.
-3. Optionen: **Bilder als Dateien speichern** und **Texterkennung (OCR)** sind standardmäßig an.
+3. **Profil** wählen: *Standard* (schlichtes Markdown, auch für Notion), *Notizen & Wissensarchiv* (mit YAML-Metadaten-Kopf für Obsidian, Logseq & Co.) oder *KI & Recherche* (zusätzlich Seitenangaben `[Seite 3]`). Das Profil setzt nur Voreinstellungen; alle Häkchen lassen sich einzeln ändern.
+   Weitere Optionen: **Bilder als Dateien speichern**, **Texterkennung für Scans** (Mac), **Kopf- und Fußzeilen entfernen** (PDF).
 4. **Konvertieren**: Fortschritt erscheint oben, Details im Protokoll.
 5. Fertig: `.md` liegt neben der Quelle bzw. im gewählten Ordner, Bilder im Ordner `…_bilder`.
 
@@ -194,7 +89,9 @@ python3 converter.py bericht.pdf -o ~/Desktop/bericht.md
 
 **Gescannte PDFs:** Enthält ein PDF kaum Text (weniger als 40 Zeichen pro Seite), liest die App es mit der Texterkennung von macOS. Der erkannte Text ist nach Seiten gegliedert und sollte auf Lesefehler geprüft werden. Tabellen und Spalten werden dabei nicht nachgebildet.
 
-Im Terminal schalten `--ohne-bilder` und `--ohne-ocr` die beiden Funktionen ab.
+**Kopf- und Fußzeilen:** Zeilen, die am oberen oder unteren Seitenrand auf mindestens 60 % der Seiten wiederkehren (Zahlen werden dabei ignoriert, „Seite 3 von 20“ zählt also als gleich), werden bei PDFs ab drei Seiten entfernt.
+
+Im Terminal schalten `--ohne-bilder` und `--ohne-ocr` die beiden Funktionen ab; `--profil "KI & Recherche"` wählt ein Profil.
 
 ## Tests
 
@@ -266,14 +163,19 @@ Quellen: `packaging/icons/generate_app_icon.py`, `generate_icns.py`, `generate_i
 - Anzeige-Name: **PDF zu Markdown**
 - Bundle-ID: `de.miwenn.pdf-zu-markdown`
 
-Die Apps sind absichtlich **nicht** signiert. Gatekeeper- und SmartScreen-Hinweise siehe oben.
+Die Apps sind absichtlich **nicht** signiert. Gatekeeper- und SmartScreen-Hinweise siehe [Anleitung](ANLEITUNG.md).
+
+### Lizenzen
+
+Beim Bauen sammelt `packaging/third_party_notices.py` die Lizenztexte aller mitgelieferten Pakete sowie von Python und Tcl/Tk in `THIRD-PARTY-NOTICES.txt`. Die Datei steckt in der App (**Über… → Lizenzen anzeigen**) und liegt dem Windows-Ordner als `LIZENZEN.txt` bei.
 
 ## Fehler, die oft vorkommen
 
 | Meldung | Was tun |
 | --- | --- |
 | „Windows hat den PC geschützt“ (SmartScreen) | Weitere Informationen → Trotzdem ausführen |
-| „kann nicht geöffnet werden“ / identifizierter Entwickler | Rechtsklick → Öffnen, oder Datenschutz & Sicherheit → Trotzdem öffnen |
+| „wurde nicht geöffnet“ / „Apple konnte nicht überprüfen“ | Fertig → Systemeinstellungen → Datenschutz & Sicherheit → Dennoch öffnen (siehe [Anleitung](ANLEITUNG.md)) |
+| „… ist beschädigt“ (Mac) | `xattr -dr com.apple.quarantine "/Applications/PDF zu Markdown.app"` |
 | MarkItDown ist nicht installiert (Quellcode) | venv aktivieren, dann `pip install -r requirements.txt` |
 | `optional dependency [pdf]` | dieselbe Installation; manuell: `pip install 'markitdown[pdf,docx,pptx,xlsx,xls]'` |
 | Kein Grafikdisplay / TclError | `python3 app.py` in der macOS-Oberfläche starten, nicht per SSH ohne Display |

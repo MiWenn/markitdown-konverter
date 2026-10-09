@@ -227,6 +227,67 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(report.ocr_pages, 1)
             self.assertIn("gescannter Testbrief", text)
             self.assertFalse((folder / "scan_bilder").exists())
+class ProfileTests(unittest.TestCase):
+    def test_repeating_header_and_footer_are_removed(self) -> None:
+        pages = [
+            f"Musterverein e.V.\nInhalt {n} ist hier.\nNoch mehr Text {n}.\nSeite {n} von 4"
+            for n in range(1, 5)
+        ]
+        cleaned, removed = converter.remove_repeating_lines(pages)
+        self.assertEqual(removed, 8)
+        self.assertEqual(cleaned[0], "Inhalt 1 ist hier.\nNoch mehr Text 1.")
+
+    def test_short_documents_keep_everything(self) -> None:
+        pages = ["Kopf\nText A", "Kopf\nText B"]
+        self.assertEqual(converter.remove_repeating_lines(pages), (pages, 0))
+
+    def test_page_markers(self) -> None:
+        self.assertEqual(
+            converter.join_pages(["Eins", "", "Drei"], page_markers=True),
+            "[Seite 1]\n\nEins\n\n[Seite 2]\n\n[Seite 3]\n\nDrei",
+        )
+        self.assertEqual(converter.join_pages(["Eins", "", "Drei"], page_markers=False), "Eins\n\nDrei")
+
+    def test_frontmatter_escapes_yaml(self) -> None:
+        head = converter.build_frontmatter(
+            Path("a.pdf"), 'Titel: mit "Zitat"', pages=2, ocr=False
+        )
+        self.assertTrue(head.startswith("---\ntitle: \"Titel: mit \\\"Zitat\\\"\"\n"))
+        self.assertIn("pages: 2", head)
+        self.assertNotIn("ocr", head)
+
+    def test_empty_table_header_gets_first_row(self) -> None:
+        table = "|  |  |\n| --- | --- |\n| Posten | Betrag |\n| Porto | 5 € |"
+        self.assertEqual(
+            converter.fix_empty_table_headers(table),
+            "| Posten | Betrag |\n| --- | --- |\n| Porto | 5 € |",
+        )
+
+    def test_page_markers_without_ocr(self) -> None:
+        # Wenig Text gilt als Scan; ohne Texterkennung (z. B. Windows) braucht es trotzdem Seiten.
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "kurz.pdf"
+            pdf.write_bytes(build_simple_pdf("Kurzer Text"))
+            converter.convert_document(pdf, folder / "kurz.md", ocr=False, page_markers=True)
+            text = (folder / "kurz.md").read_text(encoding="utf-8")
+            self.assertIn("[Seite 1]", text)
+            self.assertIn("Kurzer Text", text)
+
+    def test_profile_options_reach_the_file(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "bericht.pdf"
+            pdf.write_bytes(build_simple_pdf("Ein Absatz mit genug Text fuer eine Seite."))
+            converter.convert_document(
+                pdf, folder / "bericht.md", **converter.PROFILES["KI & Recherche"]
+            )
+            text = (folder / "bericht.md").read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("---\ntitle: "))
+            self.assertIn("[Seite 1]", text)
+            self.assertNotIn("\f", text)
+
+
 class FrozenMessageTests(unittest.TestCase):
     def test_dev_message_mentions_pip(self) -> None:
         self.assertIn("pip install", converter.missing_markitdown_message())
