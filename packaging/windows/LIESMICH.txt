@@ -1,0 +1,11 @@
+PDF zu Markdown — von Micky Wenngatz
+
+1. Diesen Ordner z. B. auf den Desktop oder nach „Dokumente“ legen.
+2. „PDF zu Markdown.exe“ doppelklicken.
+3. Beim ersten Start kann Windows SmartScreen warnen (die App ist nicht
+   signiert). Dann: „Weitere Informationen“ → „Trotzdem ausführen“.
+
+Die App wandelt PDF, Word, PowerPoint und Excel lokal in Markdown um.
+Nichts wird in die Cloud geschickt.
+
+Projekt: https://github.com/MiWenn/markitdown-konverter

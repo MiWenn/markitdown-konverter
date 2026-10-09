@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kleine macOS-taugliche Oberfläche für PDF/Office → Markdown."""
+"""Kleine Desktop-Oberfläche für PDF/Office → Markdown."""
 
 from __future__ import annotations
 
@@ -24,7 +24,17 @@ except ImportError:  # pragma: no cover - GUI-Start
     )
     raise SystemExit(1)
 
+try:  # Drag & Drop ist optional; ohne tkinterdnd2 bleibt „Auswählen…“
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except ImportError:  # pragma: no cover - abhängig von der Installation
+    DND_FILES = None
+    TkinterDnD = None
+
+_DnDBase = TkinterDnD.DnDWrapper if TkinterDnD is not None else object
+
 APP_TITLE = "PDF zu Markdown"
+APP_AUTHOR = "Micky Wenngatz"
+APP_HOMEPAGE = "https://github.com/MiWenn/markitdown-konverter"
 FILE_TYPES = [
     ("Dokumente", "*.pdf *.docx *.pptx *.xlsx *.xls"),
     ("PDF", "*.pdf"),
@@ -39,27 +49,69 @@ def _is_macos() -> bool:
     return sys.platform == "darwin"
 
 
+def _read_version() -> str:
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "VERSION")
+    candidates.append(Path(__file__).resolve().parent / "VERSION")
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    return "2.0.0"
+
+
+def about_text() -> str:
+    return (
+        f"{APP_TITLE}\n"
+        f"von {APP_AUTHOR}\n"
+        f"Version {_read_version()}\n\n"
+        "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
+        "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
+        "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
+        f"{APP_HOMEPAGE}"
+    )
+
+
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
 def reveal_in_finder(path: Path) -> None:
     if _is_macos():
         subprocess.run(["open", "-R", str(path)], check=False)
+        return
+    if _is_windows():
+        subprocess.run(["explorer", f"/select,{path}"], check=False)
         return
     folder = str(path.parent)
     if sys.platform.startswith("linux"):
         subprocess.run(["xdg-open", folder], check=False)
 
 
-class ConverterApp(ctk.CTk):
+class ConverterApp(ctk.CTk, _DnDBase):
     def __init__(self, initial_files: Sequence[Path] | None = None) -> None:
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("760x680")
-        self.minsize(640, 560)
+        self.geometry("760x780")
+        self.minsize(640, 640)
 
         self.sources: list[Path] = []
         self._busy = False
         self._events: queue.Queue = queue.Queue()
 
         self._build()
+        self._dnd_enabled = self._enable_drag_and_drop()
+        self._refresh_file_list()
+        if _is_macos():
+            # Dateien, die aufs Dock-Symbol gezogen oder per „Öffnen mit“ geschickt werden
+            self.createcommand("::tk::mac::OpenDocument", self._on_open_document)
+        self._bind_macos_about()
+        self._apply_window_icon()
         self._check_backend()
         if initial_files:
             self._add_files(initial_files)
@@ -79,6 +131,21 @@ class ConverterApp(ctk.CTk):
             font=ctk.CTkFont(size=22, weight="bold"),
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(
+            header,
+            text="Über…",
+            width=80,
+            fg_color="transparent",
+            border_width=1,
+            command=self._show_about,
+        ).grid(row=0, column=1, sticky="e", padx=(12, 0))
+        ctk.CTkLabel(
+            header,
+            text=f"von {APP_AUTHOR}",
+            font=ctk.CTkFont(size=13),
+            anchor="w",
+            text_color=("gray25", "gray75"),
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         ctk.CTkLabel(
             header,
             text="PDF, Word, PowerPoint und Excel lokal mit Microsoft MarkItDown wandeln — ohne Cloud.",
@@ -86,7 +153,7 @@ class ConverterApp(ctk.CTk):
             justify="left",
             text_color=("gray30", "gray70"),
             anchor="w",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         files_box = ctk.CTkFrame(self)
         files_box.grid(row=1, column=0, sticky="nsew", padx=20, pady=8)
@@ -112,7 +179,6 @@ class ConverterApp(ctk.CTk):
 
         self.file_box = ctk.CTkTextbox(files_box, height=120, wrap="none")
         self.file_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
-        self.file_box.insert("1.0", "Noch keine Datei. „Auswählen…“ oder Dateien per Kommandozeile übergeben.")
         self.file_box.configure(state="disabled")
 
         out_box = ctk.CTkFrame(self)
@@ -144,12 +210,39 @@ class ConverterApp(ctk.CTk):
         )
         self.output_pick_btn.grid(row=2, column=2, padx=(0, 12), pady=(0, 8))
 
-        self.reveal_var = ctk.BooleanVar(value=_is_macos())
+        self.images_var = ctk.BooleanVar(value=True)
         ctk.CTkCheckBox(
             out_box,
-            text="Im Finder zeigen (macOS)",
+            text="Bilder als Dateien speichern (Ordner „…_bilder“ neben der Markdown-Datei)",
+            variable=self.images_var,
+        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
+
+        ocr_ok = converter.ocr_available()
+        self.ocr_var = ctk.BooleanVar(value=ocr_ok)
+        ctk.CTkCheckBox(
+            out_box,
+            text=(
+                "Texterkennung (OCR) für gescannte PDFs"
+                if ocr_ok
+                else "Texterkennung (OCR) für gescannte PDFs – nicht verfügbar"
+            ),
+            variable=self.ocr_var,
+            state="normal" if ocr_ok else "disabled",
+        ).grid(row=4, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
+
+        self.reveal_var = ctk.BooleanVar(value=_is_macos())
+        self.reveal_var = ctk.BooleanVar(value=_is_macos() or _is_windows())
+        if _is_windows():
+            reveal_label = "Im Explorer zeigen"
+        elif _is_macos():
+            reveal_label = "Im Finder zeigen (macOS)"
+        else:
+            reveal_label = "Im Ordner zeigen"
+        ctk.CTkCheckBox(
+            out_box,
+            text=reveal_label,
             variable=self.reveal_var,
-        ).grid(row=3, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 12))
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 12))
 
         action = ctk.CTkFrame(self, fg_color="transparent")
         action.grid(row=3, column=0, sticky="ew", padx=20, pady=(4, 8))
@@ -184,22 +277,95 @@ class ConverterApp(ctk.CTk):
 
         self._on_mode_change(self.output_mode.get())
 
+    def _bind_macos_about(self) -> None:
+        if not _is_macos():
+            return
+        try:
+            self.createcommand("tkAboutDialog", self._show_about)
+        except tk.TclError:
+            pass
+
+    def _show_about(self) -> None:
+        messagebox.showinfo(f"Über {APP_TITLE}", about_text())
+
+    def _apply_window_icon(self) -> None:
+        if not _is_windows():
+            return
+        candidates = []
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "app_icon.ico")
+        candidates.append(Path(__file__).resolve().parent / "packaging" / "icons" / "app_icon.ico")
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).with_name("app_icon.ico"))
+        for icon in candidates:
+            if icon.is_file():
+                try:
+                    self.iconbitmap(str(icon))
+                except tk.TclError:
+                    return
+                return
+
     def _check_backend(self) -> None:
         try:
             converter.check_python_version()
             converter.create_markitdown()
-            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Mac.")
+            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Gerät.")
         except converter.ConverterError as exc:
             self._set_status("MarkItDown fehlt oder ist unvollständig.")
             self._log(str(exc))
             self.convert_btn.configure(state="disabled")
             messagebox.showerror(APP_TITLE, str(exc))
 
-    def _add_files(self, paths: Sequence[Path]) -> None:
-        added = 0
+    def _enable_drag_and_drop(self) -> bool:
+        if TkinterDnD is None:
+            return False
+        try:
+            TkinterDnD._require(self)
+        except (RuntimeError, tk.TclError):
+            return False
+        # Drop-Ziele gelten pro Widget, deshalb alle Bereiche des Fensters anmelden.
+        pending: list[tk.Misc] = [self]
+        while pending:
+            widget = pending.pop()
+            pending.extend(widget.winfo_children())
+            try:
+                widget.drop_target_register(DND_FILES)
+                widget.dnd_bind("<<Drop>>", self._on_drop)
+            except (AttributeError, tk.TclError):
+                continue
+        return True
+
+    def _on_drop(self, event) -> str:
+        self._add_files([Path(p) for p in self.tk.splitlist(event.data)])
+        return getattr(event, "action", "copy")
+
+    def _on_open_document(self, *paths: str) -> None:
+        self._add_files([Path(p) for p in paths])
+
+    def _expand(self, paths: Sequence[Path]) -> tuple[list[Path], list[str]]:
+        """Ordner werden durch die unterstützten Dateien darin ersetzt."""
+        files: list[Path] = []
         skipped: list[str] = []
         for raw in paths:
             path = Path(raw).expanduser().resolve()
+            if path.is_dir():
+                inside = sorted(
+                    p for p in path.iterdir()
+                    if p.is_file() and converter.is_supported(p) and not p.name.startswith(".")
+                    and p.suffix.lower() != ".md"
+                )
+                if not inside:
+                    skipped.append(f"{path} (Ordner ohne passende Dateien)")
+                files.extend(inside)
+            else:
+                files.append(path)
+        return files, skipped
+
+    def _add_files(self, paths: Sequence[Path]) -> None:
+        added = 0
+        expanded, skipped = self._expand(paths)
+        for path in expanded:
             if not path.is_file():
                 skipped.append(f"{path} (keine Datei)")
                 continue
@@ -222,7 +388,13 @@ class ConverterApp(ctk.CTk):
         self.file_box.configure(state="normal")
         self.file_box.delete("1.0", "end")
         if not self.sources:
-            self.file_box.insert("1.0", "Noch keine Datei. „Auswählen…“ wählen.")
+            if getattr(self, "_dnd_enabled", False):
+                hint = "Dateien oder Ordner hierher ziehen oder „Auswählen…“ klicken."
+            elif getattr(sys, "frozen", False):
+                hint = "Noch keine Datei. „Auswählen…“ wählen oder Dateien auf das App-Symbol ziehen."
+            else:
+                hint = "Noch keine Datei. „Auswählen…“ oder Dateien per Kommandozeile übergeben."
+            self.file_box.insert("1.0", hint)
         else:
             self.file_box.insert("1.0", "\n".join(str(p) for p in self.sources))
         self.file_box.configure(state="disabled")
@@ -324,22 +496,34 @@ class ConverterApp(ctk.CTk):
         self.progress.set(0)
         self._set_status(f"Starte {len(jobs)} Konvertierung(en)…")
         self._log("—")
-        worker = threading.Thread(target=self._run_jobs, args=(jobs,), daemon=True)
+        options = {"extract_images": self.images_var.get(), "ocr": self.ocr_var.get()}
+        worker = threading.Thread(target=self._run_jobs, args=(jobs, options), daemon=True)
         worker.start()
 
-    def _run_jobs(self, jobs: Sequence[converter.ConversionJob]) -> None:
-        written: list[Path] = []
-        try:
-            engine = converter.create_markitdown()
-            total = len(jobs)
-            for index, job in enumerate(jobs, start=1):
-                self._events.put(("status", f"Konvertiere {index}/{total}: {job.source.name}"))
-                self._events.put(("log", f"{index}/{total}  {job.source.name} → {job.target.name}"))
-                converter.convert_file(job.source, job.target, converter=engine)
-                written.append(job.target)
+    def _run_jobs(self, jobs: Sequence[converter.ConversionJob], options: dict) -> None:
+        def progress(kind: str, index: int, total: int, path: Path) -> None:
+            if kind == "start":
+                self._events.put(("status", f"Konvertiere {index}/{total}: {path.name}"))
+                self._events.put(("log", f"{index}/{total}  {path.name}"))
+            elif kind == "failed":
+                self._events.put(("log", "    FEHLER, wird übersprungen"))
+            if kind in {"done", "failed"}:
                 self._events.put(("progress", index / total))
-                self._events.put(("log", f"    gespeichert: {job.target}"))
-            self._events.put(("success", written))
+
+        def on_report(report: converter.ConversionReport) -> None:
+            details = []
+            if report.ocr_pages:
+                details.append(f"{report.ocr_pages} Seite(n) per Texterkennung")
+            if report.images:
+                details.append(f"{report.images} Bild(er)")
+            extra = f"  ({', '.join(details)})" if details else ""
+            self._events.put(("log", f"    gespeichert: {report.target}{extra}"))
+            for warning in report.warnings:
+                self._events.put(("log", f"    Hinweis: {warning}"))
+
+        try:
+            batch = converter.run_batch(jobs, progress=progress, on_report=on_report, **options)
+            self._events.put(("finished", batch))
         except converter.ConverterError as exc:
             self._events.put(("fail", str(exc)))
         except Exception as exc:  # pragma: no cover - unerwartete Laufzeitfehler
@@ -357,21 +541,30 @@ class ConverterApp(ctk.CTk):
                 self._set_status(str(payload))
             elif kind == "progress":
                 self.progress.set(float(payload))
-            elif kind == "success":
-                self._on_success(list(payload))
+            elif kind == "finished":
+                self._on_finished(payload)
             elif kind == "fail":
                 self._on_fail(str(payload))
         self.after(80, self._drain_events)
 
-    def _on_success(self, written: list[Path]) -> None:
+    def _on_finished(self, batch: converter.BatchResult) -> None:
         self._busy = False
         self.convert_btn.configure(state="normal")
         self.progress.set(1)
+        written = batch.written
         n = len(written)
-        self._set_status(f"Fertig: {n} Markdown-Datei(en) geschrieben.")
+        failed = len(batch.failures)
+        if failed:
+            self._set_status(f"Fertig: {n} geschrieben, {failed} fehlgeschlagen.")
+            summary = converter.failure_summary(batch.failures)
+            self._log(summary)
+        else:
+            self._set_status(f"Fertig: {n} Markdown-Datei(en) geschrieben.")
         self._log(f"Fertig. {n} Datei(en) erzeugt.")
         if self.reveal_var.get() and written:
             reveal_in_finder(written[-1])
+        if failed:
+            messagebox.showwarning(APP_TITLE, summary)
 
     def _on_fail(self, message: str) -> None:
         self._busy = False
@@ -402,6 +595,10 @@ def _argv_files(argv: Sequence[str]) -> list[Path]:
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):
+        import multiprocessing
+
+        multiprocessing.freeze_support()
     converter.check_python_version()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme("blue")
@@ -410,12 +607,15 @@ def main() -> int:
     try:
         app = ConverterApp(initial_files=initial)
     except tk.TclError as exc:
-        print(
-            "Kein Grafikdisplay gefunden.\n"
-            "Auf dem Mac: python3 app.py\n"
-            "Ohne Oberfläche: python3 converter.py datei.pdf",
-            file=sys.stderr,
-        )
+        if getattr(sys, "frozen", False):
+            print("Kein Grafikdisplay gefunden.", file=sys.stderr)
+        else:
+            print(
+                "Kein Grafikdisplay gefunden.\n"
+                "Auf dem Mac: python3 app.py\n"
+                "Ohne Oberfläche: python3 converter.py datei.pdf",
+                file=sys.stderr,
+            )
         print(exc, file=sys.stderr)
         return 1
     app.mainloop()

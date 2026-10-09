@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import converter
@@ -59,7 +60,8 @@ class JobPlanningTests(unittest.TestCase):
             b.write_bytes(b"%PDF")
             jobs = converter.build_jobs([a, b])
             self.assertEqual([j.target.name for j in jobs], ["a.md", "b.md"])
-            self.assertEqual(jobs[0].target.parent, folder)
+            # macOS: /var ist ein Symlink auf /private/var; build_jobs() nutzt resolve()
+            self.assertEqual(jobs[0].target.parent, folder.resolve())
 
     def test_build_jobs_output_dir_avoids_name_clash(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
@@ -115,6 +117,152 @@ class ConvertTests(unittest.TestCase):
         with self.assertRaises(converter.ConverterError) as ctx:
             converter.convert_file(Path("/tmp/gibt-es-nicht-12345.pdf"), Path("/tmp/x.md"))
         self.assertIn("nicht gefunden", str(ctx.exception).lower())
+
+
+class FailingEngine:
+    """Ersetzt MarkItDown: scheitert bei Dateien mit „kaputt“ im Namen."""
+
+    def convert_local(self, path: str, **kwargs):
+        if "kaputt" in path:
+            raise ValueError("Datei beschädigt")
+        return type("Result", (), {"markdown": f"Inhalt von {Path(path).name}"})()
+
+
+class BatchTests(unittest.TestCase):
+    def test_one_failure_does_not_stop_the_rest(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            files = [folder / "eins.txt", folder / "kaputt.txt", folder / "drei.txt"]
+            for f in files:
+                f.write_text("x", encoding="utf-8")
+            jobs = converter.build_jobs(files)
+            with mock.patch.object(converter, "create_markitdown", FailingEngine):
+                batch = converter.run_batch(jobs)
+            self.assertEqual([p.name for p in batch.written], ["eins.md", "drei.md"])
+            self.assertEqual([p.name for p, _ in batch.failures], ["kaputt.txt"])
+            self.assertTrue((folder / "drei.md").exists())
+
+    def test_convert_jobs_reports_failures_after_finishing(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            files = [folder / "kaputt.txt", folder / "zwei.txt"]
+            for f in files:
+                f.write_text("x", encoding="utf-8")
+            with mock.patch.object(converter, "create_markitdown", FailingEngine):
+                with self.assertRaises(converter.ConverterError) as ctx:
+                    converter.convert_jobs(converter.build_jobs(files))
+            self.assertIn("kaputt.txt", str(ctx.exception))
+            self.assertTrue((folder / "zwei.md").exists())
+
+
+PNG_1PX = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+class ImageTests(unittest.TestCase):
+    def test_data_uri_images_become_files(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            target = Path(raw) / "Mein Bericht.md"
+            markdown = f"Text\n\n![Logo](data:image/png;base64,{PNG_1PX})\n\nmehr"
+            result, count = converter.extract_data_uri_images(markdown, target)
+            self.assertEqual(count, 1)
+            self.assertIn("![Logo](<Mein Bericht_bilder/bild-001.png>)", result)
+            self.assertNotIn("base64", result)
+            saved = Path(raw) / "Mein Bericht_bilder" / "bild-001.png"
+            self.assertEqual(saved.read_bytes()[:4], b"\x89PNG")
+
+    @unittest.skipUnless(converter.pdf_images_available(), "pypdfium2/Pillow fehlen")
+    def test_pdf_images_are_saved_once(self) -> None:
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "fotos.pdf"
+            red = Image.new("RGB", (200, 150), (200, 30, 30))
+            red.save(pdf, save_all=True, append_images=[red.copy()])  # gleiches Bild auf 2 Seiten
+            section, count = converter.extract_pdf_images(pdf, folder / "fotos.md")
+            self.assertEqual(count, 1)
+            self.assertIn("Seite 1", section)
+            self.assertTrue((folder / "fotos_bilder" / "bild-001.png").exists())
+
+    def test_without_images_no_folder_is_created(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "text.pdf"
+            pdf.write_bytes(build_simple_pdf("Nur Text hier, ausreichend viele Zeichen fuer eine Seite"))
+            converter.convert_file(pdf, folder / "text.md", extract_images=False)
+            self.assertFalse((folder / "text_bilder").exists())
+
+
+class ScanTests(unittest.TestCase):
+    def test_looks_scanned(self) -> None:
+        self.assertTrue(converter.looks_scanned("  \n ", 1))
+        self.assertTrue(converter.looks_scanned("Seite 1", 3))
+        self.assertFalse(converter.looks_scanned("Ein ganz normaler Absatz " * 5, 1))
+
+    def test_scan_without_ocr_gives_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "leer.pdf"
+            pdf.write_bytes(build_simple_pdf(""))
+            report = converter.convert_document(pdf, folder / "leer.md", ocr=False)
+            self.assertTrue(any("Scan" in w for w in report.warnings))
+
+    @unittest.skipUnless(converter.ocr_available(), "Texterkennung nur auf dem Mac mit ocrmac")
+    def test_scanned_pdf_is_read_with_ocr(self) -> None:
+        from PIL import Image, ImageDraw, ImageFont
+
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            page = Image.new("RGB", (1240, 1754), "white")
+            draw = ImageDraw.Draw(page)
+            font = ImageFont.load_default(size=48)
+            draw.text((100, 150), "Sehr geehrte Damen und Herren,", fill="black", font=font)
+            draw.text((100, 240), "dies ist ein gescannter Testbrief.", fill="black", font=font)
+            pdf = folder / "scan.pdf"
+            page.save(pdf)
+            report = converter.convert_document(pdf, folder / "scan.md")
+            text = (folder / "scan.md").read_text(encoding="utf-8")
+            self.assertEqual(report.ocr_pages, 1)
+            self.assertIn("gescannter Testbrief", text)
+            self.assertFalse((folder / "scan_bilder").exists())
+class FrozenMessageTests(unittest.TestCase):
+    def test_dev_message_mentions_pip(self) -> None:
+        self.assertIn("pip install", converter.missing_markitdown_message())
+
+    def test_frozen_message_points_to_github(self) -> None:
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, "frozen", True, create=True):
+            msg = converter.missing_markitdown_message()
+        self.assertNotIn("pip install", msg)
+        self.assertIn("GitHub", msg)
+
+
+class BrandingTests(unittest.TestCase):
+    def test_readme_and_app_name_the_author(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        app_src = (root / "app.py").read_text(encoding="utf-8")
+        spec = (root / "packaging" / "macos" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
+        win_spec = (root / "packaging" / "windows" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Micky Wenngatz", readme)
+        self.assertIn('APP_AUTHOR = "Micky Wenngatz"', app_src)
+        self.assertIn("Über…", app_src)
+        self.assertIn("NSHumanReadableCopyright", spec)
+        self.assertIn("Micky Wenngatz", spec)
+        win_readme = (root / "packaging" / "windows" / "LIESMICH.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("version=version_file", win_spec)
+        self.assertIn("Micky Wenngatz", win_readme)
+        self.assertTrue((root / "packaging" / "icons" / "app_icon.ico").is_file())
 
 
 if __name__ == "__main__":
