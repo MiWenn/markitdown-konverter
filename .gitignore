@@ -15,3 +15,4 @@ build/
 .mypy_cache/
 *.md.bak
 packaging/windows/file_version_info.txt
+THIRD-PARTY-NOTICES.txt

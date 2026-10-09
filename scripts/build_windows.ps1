@@ -36,6 +36,10 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -c "import tkinter, customtkinter, markitdown; print('tkinter+markitdown ok')"
 if ($LASTEXITCODE -ne 0) { throw "Abhängigkeiten unvollständig." }
 
+Write-Host "==> Lizenzhinweise"
+& $VenvPython "$Root\packaging\third_party_notices.py"
+if ($LASTEXITCODE -ne 0) { throw "Lizenzhinweise fehlgeschlagen." }
+
 Write-Host "==> Icon (.ico)"
 & $VenvPython "$Root\packaging\icons\generate_app_icon.py"
 & $VenvPython "$Root\packaging\icons\generate_ico.py"
@@ -63,6 +67,7 @@ $Exe = Join-Path $AppDir "$AppName.exe"
 if (-not (Test-Path $Exe)) { throw "EXE nicht gefunden: $Exe" }
 
 Copy-Item "$Root\packaging\windows\LIESMICH.txt" (Join-Path $AppDir "LIESMICH.txt") -Force
+Copy-Item "$Root\THIRD-PARTY-NOTICES.txt" (Join-Path $AppDir "LIZENZEN.txt") -Force
 
 $ZipName = "PDF-zu-Markdown-$Version-windows-x64.zip"
 $ZipPath = Join-Path $Dist $ZipName

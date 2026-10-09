@@ -80,6 +80,10 @@ for dist in METADATA_DISTS:
         print(f"WARN: copy_metadata({dist!r}) übersprungen: {exc}")
 
 datas.append((str(ROOT / "VERSION"), "."))
+NOTICES = ROOT / "THIRD-PARTY-NOTICES.txt"
+if not NOTICES.is_file():
+    raise SystemExit("THIRD-PARTY-NOTICES.txt fehlt: zuerst packaging/third_party_notices.py ausführen")
+datas.append((str(NOTICES), "."))
 if ICON_ICO.is_file():
     datas.append((str(ICON_ICO), "."))
 

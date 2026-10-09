@@ -12,7 +12,10 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import datetime
 import hashlib
+import json
+import math
 import re
 import sys
 from dataclasses import dataclass, field
@@ -43,6 +46,24 @@ MIN_IMAGE_PX = 64
 OCR_LANGUAGES = ["de-DE", "en-US"]
 OCR_RENDER_SCALE = 3  # 72 dpi × 3 = 216 dpi, guter Kompromiss aus Qualität und Tempo
 
+# Eine Zeile gilt als Kopf-/Fußzeile, wenn sie am Seitenrand auf so vielen Seiten wiederkehrt.
+HEADER_MIN_SHARE = 0.6
+HEADER_MIN_PAGES = 3
+HEADER_EDGE_LINES = 2
+
+# Word-Formatvorlagen „Titel“/„Untertitel“ sind keine Überschriften im Sinne von Word,
+# sollen in Markdown aber welche werden (Mammoth-Style-Map).
+DOCX_STYLE_MAP = "p[style-name='Title'] => h1:fresh\np[style-name='Subtitle'] => h2:fresh"
+
+# Ausgabeprofile setzen nur Voreinstellungen; jede Option bleibt einzeln schaltbar.
+PROFILES: dict[str, dict[str, bool]] = {
+    "Standard": {"frontmatter": False, "page_markers": False, "strip_headers": True},
+    "Notizen & Wissensarchiv": {"frontmatter": True, "page_markers": False, "strip_headers": True},
+    "KI & Recherche": {"frontmatter": True, "page_markers": True, "strip_headers": True},
+}
+DEFAULT_PROFILE = "Standard"
+GENERATOR = "PDF zu Markdown von Micky Wenngatz"
+
 ProgressCallback = Callable[[str, int, int, Path], None]
 
 _DATA_URI_IMAGE = re.compile(
@@ -69,6 +90,7 @@ class ConversionReport:
     target: Path
     images: int = 0
     ocr_pages: int = 0
+    removed_lines: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -227,6 +249,19 @@ def _humanize_error(exc: BaseException, source: Path) -> str:
     return f"Konvertierung von „{source.name}“ fehlgeschlagen:\n{message}"
 
 
+_EMPTY_TABLE_HEADER = re.compile(
+    r"^(?P<empty>\|(?:\s*\|)+)\n(?P<sep>\|(?:\s*:?-{3,}:?\s*\|)+)\n(?P<first>\|.*\|)$", re.M
+)
+
+
+def fix_empty_table_headers(markdown: str) -> str:
+    """Word-Tabellen haben oft keine echte Kopfzeile; MarkItDown setzt dann eine leere.
+
+    Die erste Datenzeile wird zur Kopfzeile, so wie man die Tabelle in Word liest.
+    """
+    return _EMPTY_TABLE_HEADER.sub(lambda m: f"{m['first']}\n{m['sep']}", markdown)
+
+
 def _visible_chars(text: str) -> int:
     return len(re.sub(r"\s", "", text))
 
@@ -327,24 +362,181 @@ def _ocr_page_text(observations: list) -> str:
     return "\n\n".join("\n".join(lines) for lines in paragraphs if lines)
 
 
-def ocr_pdf(source: Path) -> tuple[str, int]:
-    """Liest ein gescanntes PDF Seite für Seite mit Apple Vision. Liefert (Markdown, Seiten)."""
+def ocr_pdf(source: Path) -> list[str]:
+    """Liest ein gescanntes PDF Seite für Seite mit Apple Vision. Liefert den Text je Seite."""
     import pypdfium2 as pdfium
     from ocrmac import ocrmac
 
     pdf = pdfium.PdfDocument(str(source))
-    parts: list[str] = []
+    pages: list[str] = []
     try:
-        for number, page in enumerate(pdf, start=1):
+        for page in pdf:
             image = page.render(scale=OCR_RENDER_SCALE).to_pil()
             observations = ocrmac.OCR(
                 image, language_preference=OCR_LANGUAGES
             ).recognize()
-            text = _ocr_page_text(observations)
-            parts.append(f"## Seite {number}\n\n{text}" if text else f"## Seite {number}\n\n*(kein Text erkannt)*")
-        return "\n\n".join(parts), len(pdf)
+            pages.append(_ocr_page_text(observations))
+        return pages
     finally:
         pdf.close()
+
+
+def _pdf_pages_text(source: Path) -> list[str] | None:
+    """Text je Seite, auf demselben Weg wie MarkItDown.
+
+    MarkItDown liefert die Seitengrenzen nicht immer mit (bei Tabellen-PDFs und bei
+    einseitigen PDFs). Wie MarkItDown: Gibt es keine Formular-/Tabellenseiten, liest
+    pdfminer das ganze Dokument (bessere Absätze), sonst pdfplumber Seite für Seite.
+    """
+    try:
+        import pdfminer.high_level
+        import pdfplumber
+        from markitdown.converters import _pdf_converter as md_pdf
+    except ImportError:
+        return None
+    extract_form = getattr(md_pdf, "_extract_form_content_from_words", None)
+    merge_numbering = getattr(md_pdf, "_merge_partial_numbering_lines", lambda text: text)
+
+    pages: list[str] = []
+    has_form_page = False
+    with pdfplumber.open(str(source)) as pdf:
+        for page in pdf.pages:
+            content = extract_form(page) if extract_form is not None else None
+            if content is not None:
+                has_form_page = True
+            else:
+                content = page.extract_text() or ""
+            pages.append(content)
+            page.close()
+
+    if not has_form_page:
+        by_page = split_pages(pdfminer.high_level.extract_text(str(source)))
+        if by_page is not None:
+            pages = by_page
+    return [merge_numbering(page).strip() for page in pages]
+
+
+def split_pages(markdown: str) -> list[str] | None:
+    """Teilt MarkItDown-Text an Seitenumbrüchen (\\f von pdfminer)."""
+    if "\f" not in markdown:
+        return None
+    pages = markdown.split("\f")
+    if pages and not pages[-1].strip():
+        pages.pop()  # pdfminer setzt nach der letzten Seite noch einen Umbruch
+    return [page.strip() for page in pages]
+
+
+def _line_key(line: str) -> str:
+    # Seitenzahlen und Datumsangaben sollen nicht verhindern, dass Zeilen als gleich gelten.
+    return re.sub(r"\d+", "#", line.strip().lower())
+
+
+def _edge_indices(lines: list[str]) -> list[int]:
+    filled = [i for i, line in enumerate(lines) if line.strip()]
+    if len(filled) < 3:
+        return []  # zu kurze Seiten: kein verlässlicher Rand
+    # Bei kurzen Seiten nur die erste und letzte Zeile prüfen, damit Inhalt sicher bleibt.
+    depth = HEADER_EDGE_LINES if len(filled) > 2 * HEADER_EDGE_LINES + 1 else 1
+    return sorted(set(filled[:depth] + filled[-depth:]))
+
+
+def remove_repeating_lines(pages: list[str]) -> tuple[list[str], int]:
+    """Entfernt Kopf- und Fußzeilen, die auf den meisten Seiten am Rand wiederkehren."""
+    if len(pages) < HEADER_MIN_PAGES:
+        return pages, 0
+    split = [page.splitlines() for page in pages]
+    counts: dict[str, int] = {}
+    for lines in split:
+        for key in {_line_key(lines[i]) for i in _edge_indices(lines)}:
+            if key:
+                counts[key] = counts.get(key, 0) + 1
+    needed = max(HEADER_MIN_PAGES, math.ceil(len(pages) * HEADER_MIN_SHARE))
+    repeated = {key for key, count in counts.items() if count >= needed}
+    if not repeated:
+        return pages, 0
+
+    removed = 0
+    cleaned: list[str] = []
+    for lines in split:
+        edges = set(_edge_indices(lines))
+        keep = []
+        for i, line in enumerate(lines):
+            if i in edges and _line_key(line) in repeated:
+                removed += 1
+                continue
+            keep.append(line)
+        cleaned.append(re.sub(r"\n{3,}", "\n\n", "\n".join(keep)).strip())
+    return cleaned, removed
+
+
+def join_pages(pages: list[str], *, page_markers: bool) -> str:
+    if not page_markers:
+        return "\n\n".join(page for page in pages if page)
+    parts = []
+    for number, page in enumerate(pages, start=1):
+        parts.append(f"[Seite {number}]\n\n{page}" if page else f"[Seite {number}]")
+    return "\n\n".join(parts)
+
+
+def _docx_title(source: Path) -> str | None:
+    """Titel aus den Word-Dokumenteigenschaften (docProps/core.xml)."""
+    import zipfile
+    from xml.etree import ElementTree
+
+    try:
+        with zipfile.ZipFile(source) as archive:
+            root = ElementTree.fromstring(archive.read("docProps/core.xml"))
+    except (KeyError, OSError, zipfile.BadZipFile, ElementTree.ParseError):
+        return None
+    element = root.find("{http://purl.org/dc/elements/1.1/}title")
+    return element.text if element is not None and element.text else None
+
+
+def _document_title(source: Path, result, markdown: str) -> str:
+    title = getattr(result, "title", None)
+    if not title and source.suffix.lower() == ".docx":
+        title = _docx_title(source)
+    if not title and source.suffix.lower() == ".pdf":
+        try:
+            import pypdfium2 as pdfium
+
+            pdf = pdfium.PdfDocument(str(source))
+            try:
+                title = pdf.get_metadata_dict().get("Title")
+            finally:
+                pdf.close()
+        except Exception:
+            title = None
+    if title:
+        # Programme schreiben oft Platzhalter oder Dateinamen in die PDF-Metadaten.
+        title = re.sub(r"^Microsoft (Word|PowerPoint|Excel) - ", "", str(title)).strip()
+        if title.lower().strip("()") in {"untitled", "unbenannt", "ohne titel", "title", "anonymous"} or re.search(
+            r"\.(docx?|pptx?|xlsx?|pdf)$", title, re.I
+        ):
+            title = None
+    if not title:
+        heading = re.search(r"^#{1,2}\s+(.+)$", markdown, re.M)
+        title = heading.group(1) if heading else None
+    return (title or source.stem).strip()
+
+
+def build_frontmatter(source: Path, title: str, *, pages: int | None, ocr: bool) -> str:
+    """YAML-Kopf, den Obsidian als Eigenschaften und KI-Werkzeuge als Metadaten lesen."""
+    fields = {
+        "title": title,
+        "source": source.name,
+        "pages": pages,
+        "ocr": True if ocr else None,
+        "converted": datetime.date.today().isoformat(),
+        "generator": GENERATOR,
+    }
+    # JSON-Strings sind gültiges YAML und maskieren Doppelpunkte, Anführungszeichen usw.
+    lines = [
+        f"{key}: {json.dumps(value, ensure_ascii=False)}"
+        for key, value in fields.items()
+        if value is not None
+    ]
+    return "---\n" + "\n".join(lines) + "\n---\n\n"
 
 
 def extract_pdf_images(
@@ -391,6 +583,9 @@ def convert_document(
     converter=None,
     extract_images: bool = True,
     ocr: bool = True,
+    frontmatter: bool = False,
+    page_markers: bool = False,
+    strip_headers: bool = False,
 ) -> ConversionReport:
     source = Path(source)
     target = Path(target)
@@ -404,11 +599,11 @@ def convert_document(
     report = ConversionReport(source, target)
     is_pdf = source.suffix.lower() == ".pdf"
 
+    extra: dict = {"keep_data_uris": True} if extract_images else {}
+    if source.suffix.lower() == ".docx":
+        extra["style_map"] = DOCX_STYLE_MAP
     try:
-        if extract_images:
-            result = engine.convert_local(str(source), keep_data_uris=True)
-        else:
-            result = engine.convert_local(str(source))
+        result = engine.convert_local(str(source), **extra)
     except ConverterError:
         raise
     except Exception as exc:
@@ -418,26 +613,42 @@ def convert_document(
     if markdown is None:
         markdown = getattr(result, "text_content", "")
     markdown = str(markdown or "")
+    page_count: int | None = None
 
     try:
-        if is_pdf and looks_scanned(markdown, _pdf_page_count(source)):
-            if not ocr:
-                report.warnings.append(
-                    "Das PDF enthält kaum Text, vermutlich ein Scan. "
-                    "Texterkennung ist ausgeschaltet."
-                )
-            elif not ocr_available():
-                report.warnings.append(
-                    "Das PDF enthält kaum Text, vermutlich ein Scan. "
-                    "Texterkennung ist nicht verfügbar (nur auf dem Mac, "
-                    "Pakete aus requirements.txt nötig)."
-                )
-            else:
-                ocr_text, report.ocr_pages = ocr_pdf(source)
+        if is_pdf:
+            page_count = _pdf_page_count(source)
+            pages = split_pages(markdown)
+            if looks_scanned(markdown, page_count):
+                if not ocr:
+                    report.warnings.append(
+                        "Das PDF enthält kaum Text, vermutlich ein Scan. "
+                        "Texterkennung ist ausgeschaltet."
+                    )
+                elif not ocr_available():
+                    report.warnings.append(
+                        "Das PDF enthält kaum Text, vermutlich ein Scan. "
+                        "Texterkennung ist nur auf dem Mac verfügbar."
+                    )
+                else:
+                    pages = ocr_pdf(source)
+                    report.ocr_pages = len(pages)
+                    if not page_markers:
+                        pages = [page or "*(kein Text erkannt)*" for page in pages]
+            elif pages is None and (page_markers or strip_headers):
+                pages = _pdf_pages_text(source)
+
+            if pages is not None:
+                if strip_headers:
+                    pages, report.removed_lines = remove_repeating_lines(pages)
+                markdown = join_pages(pages, page_markers=page_markers)
+            if report.ocr_pages:
                 markdown = (
                     "*Text per Texterkennung (OCR) aus gescannten Seiten gewonnen. "
-                    "Bitte auf Lesefehler prüfen.*\n\n" + ocr_text
+                    "Bitte auf Lesefehler prüfen.*\n\n" + markdown
                 )
+        # Seitenumbruch-Zeichen haben in Markdown nichts verloren.
+        markdown = fix_empty_table_headers(markdown.replace("\f", "\n\n"))
 
         if extract_images:
             writer = _ImageWriter(target)
@@ -449,6 +660,14 @@ def convert_document(
                 if section:
                     markdown = markdown.rstrip() + "\n\n" + section + "\n"
             report.images = writer.count
+
+        if _visible_chars(markdown) == 0:
+            report.warnings.append("Das Ergebnis ist leer, es wurde kein Text gefunden.")
+        if frontmatter:
+            title = _document_title(source, result, markdown)
+            markdown = build_frontmatter(
+                source, title, pages=page_count, ocr=bool(report.ocr_pages)
+            ) + markdown.lstrip()
     except OSError as exc:
         raise ConverterError(
             f"Bilder zu „{source.name}“ konnten nicht gespeichert werden:\n{exc}"
@@ -456,12 +675,9 @@ def convert_document(
     except Exception as exc:
         raise ConverterError(_humanize_error(exc, source)) from exc
 
-    if _visible_chars(markdown) == 0:
-        report.warnings.append("Das Ergebnis ist leer, es wurde kein Text gefunden.")
-
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(markdown, encoding="utf-8")
+        target.write_text(markdown.rstrip() + "\n", encoding="utf-8")
     except OSError as exc:
         raise ConverterError(
             f"Markdown-Datei konnte nicht geschrieben werden:\n{target}\n{exc}"
@@ -475,12 +691,9 @@ def convert_file(
     target: Path,
     *,
     converter=None,
-    extract_images: bool = True,
-    ocr: bool = True,
+    **options: bool,
 ) -> Path:
-    return convert_document(
-        source, target, converter=converter, extract_images=extract_images, ocr=ocr
-    ).target
+    return convert_document(source, target, converter=converter, **options).target
 
 
 def run_batch(
@@ -488,8 +701,7 @@ def run_batch(
     *,
     progress: ProgressCallback | None = None,
     on_report: Callable[[ConversionReport], None] | None = None,
-    extract_images: bool = True,
-    ocr: bool = True,
+    **options: bool,
 ) -> BatchResult:
     """Wandelt alle Dateien um. Ein Fehler stoppt nicht die übrigen Dateien."""
     if not jobs:
@@ -502,13 +714,7 @@ def run_batch(
         if progress is not None:
             progress("start", index, total, job.source)
         try:
-            report = convert_document(
-                job.source,
-                job.target,
-                converter=engine,
-                extract_images=extract_images,
-                ocr=ocr,
-            )
+            report = convert_document(job.source, job.target, converter=engine, **options)
         except ConverterError as exc:
             batch.failures.append((job.source, str(exc)))
             if progress is not None:
@@ -538,11 +744,10 @@ def convert_jobs(
     jobs: Sequence[ConversionJob],
     *,
     progress: ProgressCallback | None = None,
-    extract_images: bool = True,
-    ocr: bool = True,
+    **options: bool,
 ) -> list[Path]:
     """Wie run_batch; meldet Fehler aber erst am Ende gesammelt als ConverterError."""
-    batch = run_batch(jobs, progress=progress, extract_images=extract_images, ocr=ocr)
+    batch = run_batch(jobs, progress=progress, **options)
     if batch.failures:
         raise ConverterError(failure_summary(batch.failures))
     return batch.written
@@ -579,13 +784,22 @@ def _cli(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Keine Texterkennung für gescannte PDFs",
     )
+    parser.add_argument(
+        "--profil",
+        choices=list(PROFILES),
+        default=DEFAULT_PROFILE,
+        help="Ausgabeprofil (Metadaten-Kopf, Seitenmarkierungen, Kopf-/Fußzeilen)",
+    )
     args = parser.parse_args(argv)
 
     try:
         check_python_version()
         jobs = build_jobs(args.quellen, output_file=args.output, output_dir=args.out_dir)
         batch = run_batch(
-            jobs, extract_images=not args.ohne_bilder, ocr=not args.ohne_ocr
+            jobs,
+            extract_images=not args.ohne_bilder,
+            ocr=not args.ohne_ocr,
+            **PROFILES[args.profil],
         )
     except ConverterError as exc:
         print(exc, file=sys.stderr)

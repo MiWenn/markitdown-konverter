@@ -93,6 +93,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout (für die Release-Beschreibung)
+        uses: actions/checkout@v4
+
       - name: Artifacts laden
         uses: actions/download-artifact@v4
         with:
@@ -109,5 +112,5 @@ jobs:
             artifacts/PDF-zu-Markdown-macos-arm64/*
             artifacts/PDF-zu-Markdown-macos-x86_64/*
             artifacts/PDF-zu-Markdown-windows-x64.zip
-          generate_release_notes: true
+          body_path: packaging/release-notes.md
           fail_on_unmatched_files: true
