@@ -635,7 +635,7 @@ def convert_document(
                     report.ocr_pages = len(pages)
                     if not page_markers:
                         pages = [page or "*(kein Text erkannt)*" for page in pages]
-            elif pages is None and (page_markers or strip_headers):
+            if pages is None and (page_markers or strip_headers):
                 pages = _pdf_pages_text(source)
 
             if pages is not None:

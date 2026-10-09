@@ -263,6 +263,17 @@ class ProfileTests(unittest.TestCase):
             "| Posten | Betrag |\n| --- | --- |\n| Porto | 5 € |",
         )
 
+    def test_page_markers_without_ocr(self) -> None:
+        # Wenig Text gilt als Scan; ohne Texterkennung (z. B. Windows) braucht es trotzdem Seiten.
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "kurz.pdf"
+            pdf.write_bytes(build_simple_pdf("Kurzer Text"))
+            converter.convert_document(pdf, folder / "kurz.md", ocr=False, page_markers=True)
+            text = (folder / "kurz.md").read_text(encoding="utf-8")
+            self.assertIn("[Seite 1]", text)
+            self.assertIn("Kurzer Text", text)
+
     def test_profile_options_reach_the_file(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             folder = Path(raw)
