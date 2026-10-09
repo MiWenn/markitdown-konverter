@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Kleine macOS-taugliche Oberfläche für PDF/Office → Markdown."""
+"""Kleine Desktop-Oberfläche für PDF/Office → Markdown."""
 
 from __future__ import annotations
 
@@ -33,6 +33,8 @@ except ImportError:  # pragma: no cover - abhängig von der Installation
 _DnDBase = TkinterDnD.DnDWrapper if TkinterDnD is not None else object
 
 APP_TITLE = "PDF zu Markdown"
+APP_AUTHOR = "Micky Wenngatz"
+APP_HOMEPAGE = "https://github.com/MiWenn/markitdown-konverter"
 FILE_TYPES = [
     ("Dokumente", "*.pdf *.docx *.pptx *.xlsx *.xls"),
     ("PDF", "*.pdf"),
@@ -47,9 +49,44 @@ def _is_macos() -> bool:
     return sys.platform == "darwin"
 
 
+def _read_version() -> str:
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "VERSION")
+    candidates.append(Path(__file__).resolve().parent / "VERSION")
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if text:
+            return text
+    return "2.0.0"
+
+
+def about_text() -> str:
+    return (
+        f"{APP_TITLE}\n"
+        f"von {APP_AUTHOR}\n"
+        f"Version {_read_version()}\n\n"
+        "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
+        "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
+        "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
+        f"{APP_HOMEPAGE}"
+    )
+
+
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
 def reveal_in_finder(path: Path) -> None:
     if _is_macos():
         subprocess.run(["open", "-R", str(path)], check=False)
+        return
+    if _is_windows():
+        subprocess.run(["explorer", f"/select,{path}"], check=False)
         return
     folder = str(path.parent)
     if sys.platform.startswith("linux"):
@@ -73,6 +110,8 @@ class ConverterApp(ctk.CTk, _DnDBase):
         if _is_macos():
             # Dateien, die aufs Dock-Symbol gezogen oder per „Öffnen mit“ geschickt werden
             self.createcommand("::tk::mac::OpenDocument", self._on_open_document)
+        self._bind_macos_about()
+        self._apply_window_icon()
         self._check_backend()
         if initial_files:
             self._add_files(initial_files)
@@ -92,6 +131,21 @@ class ConverterApp(ctk.CTk, _DnDBase):
             font=ctk.CTkFont(size=22, weight="bold"),
             anchor="w",
         ).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(
+            header,
+            text="Über…",
+            width=80,
+            fg_color="transparent",
+            border_width=1,
+            command=self._show_about,
+        ).grid(row=0, column=1, sticky="e", padx=(12, 0))
+        ctk.CTkLabel(
+            header,
+            text=f"von {APP_AUTHOR}",
+            font=ctk.CTkFont(size=13),
+            anchor="w",
+            text_color=("gray25", "gray75"),
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
         ctk.CTkLabel(
             header,
             text="PDF, Word, PowerPoint und Excel lokal mit Microsoft MarkItDown wandeln — ohne Cloud.",
@@ -99,7 +153,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
             justify="left",
             text_color=("gray30", "gray70"),
             anchor="w",
-        ).grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         files_box = ctk.CTkFrame(self)
         files_box.grid(row=1, column=0, sticky="nsew", padx=20, pady=8)
@@ -177,9 +231,16 @@ class ConverterApp(ctk.CTk, _DnDBase):
         ).grid(row=4, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
 
         self.reveal_var = ctk.BooleanVar(value=_is_macos())
+        self.reveal_var = ctk.BooleanVar(value=_is_macos() or _is_windows())
+        if _is_windows():
+            reveal_label = "Im Explorer zeigen"
+        elif _is_macos():
+            reveal_label = "Im Finder zeigen (macOS)"
+        else:
+            reveal_label = "Im Ordner zeigen"
         ctk.CTkCheckBox(
             out_box,
-            text="Im Finder zeigen (macOS)",
+            text=reveal_label,
             variable=self.reveal_var,
         ).grid(row=5, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 12))
 
@@ -216,11 +277,40 @@ class ConverterApp(ctk.CTk, _DnDBase):
 
         self._on_mode_change(self.output_mode.get())
 
+    def _bind_macos_about(self) -> None:
+        if not _is_macos():
+            return
+        try:
+            self.createcommand("tkAboutDialog", self._show_about)
+        except tk.TclError:
+            pass
+
+    def _show_about(self) -> None:
+        messagebox.showinfo(f"Über {APP_TITLE}", about_text())
+
+    def _apply_window_icon(self) -> None:
+        if not _is_windows():
+            return
+        candidates = []
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "app_icon.ico")
+        candidates.append(Path(__file__).resolve().parent / "packaging" / "icons" / "app_icon.ico")
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).with_name("app_icon.ico"))
+        for icon in candidates:
+            if icon.is_file():
+                try:
+                    self.iconbitmap(str(icon))
+                except tk.TclError:
+                    return
+                return
+
     def _check_backend(self) -> None:
         try:
             converter.check_python_version()
             converter.create_markitdown()
-            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Mac.")
+            self._log("MarkItDown ist bereit. Konvertierung läuft lokal auf diesem Gerät.")
         except converter.ConverterError as exc:
             self._set_status("MarkItDown fehlt oder ist unvollständig.")
             self._log(str(exc))
@@ -298,11 +388,12 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self.file_box.configure(state="normal")
         self.file_box.delete("1.0", "end")
         if not self.sources:
-            hint = (
-                "Dateien oder Ordner hierher ziehen oder „Auswählen…“ klicken."
-                if getattr(self, "_dnd_enabled", False)
-                else "Noch keine Datei. „Auswählen…“ klicken."
-            )
+            if getattr(self, "_dnd_enabled", False):
+                hint = "Dateien oder Ordner hierher ziehen oder „Auswählen…“ klicken."
+            elif getattr(sys, "frozen", False):
+                hint = "Noch keine Datei. „Auswählen…“ wählen oder Dateien auf das App-Symbol ziehen."
+            else:
+                hint = "Noch keine Datei. „Auswählen…“ oder Dateien per Kommandozeile übergeben."
             self.file_box.insert("1.0", hint)
         else:
             self.file_box.insert("1.0", "\n".join(str(p) for p in self.sources))
@@ -504,6 +595,10 @@ def _argv_files(argv: Sequence[str]) -> list[Path]:
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):
+        import multiprocessing
+
+        multiprocessing.freeze_support()
     converter.check_python_version()
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme("blue")
@@ -512,12 +607,15 @@ def main() -> int:
     try:
         app = ConverterApp(initial_files=initial)
     except tk.TclError as exc:
-        print(
-            "Kein Grafikdisplay gefunden.\n"
-            "Auf dem Mac: python3 app.py\n"
-            "Ohne Oberfläche: python3 converter.py datei.pdf",
-            file=sys.stderr,
-        )
+        if getattr(sys, "frozen", False):
+            print("Kein Grafikdisplay gefunden.", file=sys.stderr)
+        else:
+            print(
+                "Kein Grafikdisplay gefunden.\n"
+                "Auf dem Mac: python3 app.py\n"
+                "Ohne Oberfläche: python3 converter.py datei.pdf",
+                file=sys.stderr,
+            )
         print(exc, file=sys.stderr)
         return 1
     app.mainloop()

@@ -89,7 +89,16 @@ def check_python_version() -> None:
         )
 
 
+def _is_frozen() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
 def missing_markitdown_message() -> str:
+    if _is_frozen():
+        return (
+            "Microsoft MarkItDown fehlt in dieser App-Version.\n"
+            "Bitte die App erneut von GitHub laden (Releases oder Actions → macOS App)."
+        )
     return (
         "Microsoft MarkItDown ist nicht installiert oder unvollständig.\n\n"
         "Im Projektordner im Terminal:\n"
@@ -201,6 +210,11 @@ def _humanize_error(exc: BaseException, source: Path) -> str:
     message = str(exc).strip() or name
 
     if name == "MissingDependencyException" or "optional dependency" in message.lower():
+        if _is_frozen():
+            return (
+                f"Für „{source.name}“ fehlen Bestandteile in dieser App.\n"
+                "Bitte eine neuere Version der App von GitHub laden."
+            )
         return (
             f"Für „{source.name}“ fehlen MarkItDown-Zusatzpakete.\n"
             "Bitte erneut installieren:\n"

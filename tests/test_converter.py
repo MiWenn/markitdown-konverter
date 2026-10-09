@@ -60,6 +60,7 @@ class JobPlanningTests(unittest.TestCase):
             b.write_bytes(b"%PDF")
             jobs = converter.build_jobs([a, b])
             self.assertEqual([j.target.name for j in jobs], ["a.md", "b.md"])
+            # macOS: /var ist ein Symlink auf /private/var; build_jobs() nutzt resolve()
             self.assertEqual(jobs[0].target.parent, folder.resolve())
 
     def test_build_jobs_output_dir_avoids_name_clash(self) -> None:
@@ -226,6 +227,42 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(report.ocr_pages, 1)
             self.assertIn("gescannter Testbrief", text)
             self.assertFalse((folder / "scan_bilder").exists())
+class FrozenMessageTests(unittest.TestCase):
+    def test_dev_message_mentions_pip(self) -> None:
+        self.assertIn("pip install", converter.missing_markitdown_message())
+
+    def test_frozen_message_points_to_github(self) -> None:
+        import sys
+        from unittest.mock import patch
+
+        with patch.object(sys, "frozen", True, create=True):
+            msg = converter.missing_markitdown_message()
+        self.assertNotIn("pip install", msg)
+        self.assertIn("GitHub", msg)
+
+
+class BrandingTests(unittest.TestCase):
+    def test_readme_and_app_name_the_author(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        readme = (root / "README.md").read_text(encoding="utf-8")
+        app_src = (root / "app.py").read_text(encoding="utf-8")
+        spec = (root / "packaging" / "macos" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
+        win_spec = (root / "packaging" / "windows" / "PDF-zu-Markdown.spec").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("Micky Wenngatz", readme)
+        self.assertIn('APP_AUTHOR = "Micky Wenngatz"', app_src)
+        self.assertIn("Über…", app_src)
+        self.assertIn("NSHumanReadableCopyright", spec)
+        self.assertIn("Micky Wenngatz", spec)
+        win_readme = (root / "packaging" / "windows" / "LIESMICH.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("version=version_file", win_spec)
+        self.assertIn("Micky Wenngatz", win_readme)
+        self.assertTrue((root / "packaging" / "icons" / "app_icon.ico").is_file())
 
 
 if __name__ == "__main__":

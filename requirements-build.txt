@@ -1,0 +1,4 @@
+# Build-Zeit, nicht nötig zum Ausführen aus dem Quellcode
+pyinstaller>=6.11.0
+pyinstaller-hooks-contrib>=2025.1
+Pillow>=10.0.0
