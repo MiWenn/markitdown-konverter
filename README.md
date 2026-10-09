@@ -169,6 +169,12 @@ Die Apps sind absichtlich **nicht** signiert. Gatekeeper- und SmartScreen-Hinwei
 
 Beim Bauen sammelt `packaging/third_party_notices.py` die Lizenztexte aller mitgelieferten Pakete sowie von Python und Tcl/Tk in `THIRD-PARTY-NOTICES.txt`. Die Datei steckt in der App (**Über… → Lizenzen anzeigen**) und liegt dem Windows-Ordner als `LIZENZEN.txt` bei.
 
+## Lizenz
+
+© 2026 Micky Wenngatz. Dieses Projekt ist freie Software unter der **GNU General Public License Version 3** (GPL-3.0-only), siehe [LICENSE](LICENSE). Nutzen, Weitergeben und Verändern sind erlaubt; veränderte Fassungen müssen bei der Weitergabe ebenfalls unter der GPL-3.0 mit Quellcode veröffentlicht werden. Es gibt keine Gewährleistung.
+
+Die mitgelieferten Bausteine (u. a. Microsoft MarkItDown, MIT) stehen unter eigenen, mit der GPL-3.0 verträglichen Lizenzen; siehe `THIRD-PARTY-NOTICES.txt` bzw. „Über… → Lizenzen anzeigen“.
+
 ## Fehler, die oft vorkommen
 
 | Meldung | Was tun |

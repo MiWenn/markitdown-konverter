@@ -23,5 +23,7 @@ Hinweis: Die Texterkennung für gescannte PDFs gibt es nur auf dem Mac.
 Ausführliche Anleitung:
 https://github.com/MiWenn/markitdown-konverter/blob/main/ANLEITUNG.md
 
-Die App arbeitet vollständig offline. Lizenzen der enthaltenen
-Open-Source-Bausteine: LIZENZEN.txt in diesem Ordner.
+Die App arbeitet vollständig offline.
+
+Lizenz: freie Software unter der GNU GPL Version 3. Lizenztext und
+die Lizenzen der enthaltenen Bausteine: LIZENZEN.txt in diesem Ordner.

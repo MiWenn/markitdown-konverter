@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Micky Wenngatz
 """Kleine Desktop-Oberfläche für PDF/Office → Markdown."""
 
 from __future__ import annotations
@@ -62,7 +64,7 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "2.0.0"
+    return "2.0.1"
 
 
 def about_text() -> str:
@@ -73,8 +75,11 @@ def about_text() -> str:
         "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
         "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
         "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
-        f"{APP_HOMEPAGE}\n\n"
-        "Enthält Open-Source-Bausteine; deren Lizenzen siehe „Lizenzen anzeigen“."
+        f"© 2026 {APP_AUTHOR}. Freie Software unter der GNU General Public "
+        "License Version 3 (GPL-3.0); ohne jede Gewährleistung.\n"
+        f"Quellcode: {APP_HOMEPAGE}\n\n"
+        "Lizenztext und die Lizenzen der enthaltenen Open-Source-Bausteine "
+        "siehe „Lizenzen anzeigen“."
     )
 
 

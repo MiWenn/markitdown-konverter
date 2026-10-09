@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Micky Wenngatz
 """Lokale Konvertierung von PDF- und Office-Dateien nach Markdown.
 
 Nutzt Microsoft MarkItDown (convert_local) für die Umwandlung.

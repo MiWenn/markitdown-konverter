@@ -26,3 +26,4 @@ Kurzfassung:
 - Profile für schlichtes Markdown, Notiz-Apps wie Obsidian sowie KI & Recherche (mit Seitenangaben)
 - Kopf- und Fußzeilen in PDFs werden entfernt
 - Alles läuft offline auf deinem Computer
+- Freie Software unter der GNU GPL Version 3, Quellcode in diesem Projekt

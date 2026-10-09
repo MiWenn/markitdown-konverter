@@ -28,3 +28,6 @@ https://github.com/MiWenn/markitdown-konverter/blob/main/ANLEITUNG.md
 
 Die App arbeitet vollständig offline. Deine Dokumente verlassen den
 Computer nicht.
+
+Lizenz: freie Software unter der GNU GPL Version 3.
+Lizenztext in der App unter „Über… → Lizenzen anzeigen“.
