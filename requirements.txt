@@ -1,6 +1,15 @@
 # GUI (läuft mit dem Tk, das bei python.org-Python auf dem Mac mitkommt)
 customtkinter>=5.2.0
+# Dateien ins Fenster ziehen (Drag & Drop); ohne das Paket bleibt „Auswählen…“
+tkinterdnd2>=0.4.0
 
 # Microsoft MarkItDown — nur lokale Konverter, ohne Azure/Cloud
 # PDF plus gängige Office-Formate (Word, PowerPoint, Excel)
 markitdown[pdf,docx,pptx,xlsx,xls]>=0.1.0
+
+# Bilder aus PDFs speichern und gescannte Seiten für die Texterkennung lesen
+pypdfium2>=4.30
+pillow>=10.1
+
+# Texterkennung (OCR) mit Apple Vision, läuft lokal und nur auf dem Mac
+ocrmac>=1.0; sys_platform == "darwin"
