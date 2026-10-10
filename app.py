@@ -9,6 +9,7 @@ import queue
 import subprocess
 import sys
 import threading
+import webbrowser
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -37,6 +38,17 @@ _DnDBase = TkinterDnD.DnDWrapper if TkinterDnD is not None else object
 APP_TITLE = "PDF zu Markdown"
 APP_AUTHOR = "Micky Wenngatz"
 APP_HOMEPAGE = "https://github.com/MiWenn/markitdown-konverter"
+APP_WEBSITE = "https://www.politik21.de"
+
+# Zweitrangige Knöpfe: ohne Füllung, aber mit lesbarer Schrift in hellem und dunklem Modus
+# (die Standard-Schrift von CustomTkinter ist weiß und auf transparentem Grund unsichtbar).
+SECONDARY_BUTTON = {
+    "fg_color": "transparent",
+    "border_width": 1,
+    "border_color": ("gray55", "gray45"),
+    "text_color": ("gray10", "gray90"),
+    "hover_color": ("gray80", "gray30"),
+}
 FILE_TYPES = [
     ("Dokumente", "*.pdf *.docx *.pptx *.xlsx *.xls"),
     ("PDF", "*.pdf"),
@@ -64,13 +76,14 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "2.0.1"
+    return "2.0.2"
 
 
 def about_text() -> str:
     return (
         f"{APP_TITLE}\n"
         f"von {APP_AUTHOR}\n"
+        f"{APP_WEBSITE.removeprefix('https://')}\n"
         f"Version {_read_version()}\n\n"
         "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
         "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
@@ -139,8 +152,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
     def __init__(self, initial_files: Sequence[Path] | None = None) -> None:
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("780x820")
-        self.minsize(640, 640)
+        # So hoch wie möglich, aber nie höher als der Bildschirm (MacBook Air: ~800 px nutzbar).
+        # Protokoll steht rechts neben der Bedienung, damit es auch auf kleinen
+        # Bildschirmen (MacBook Air: ~800 px nutzbare Höhe) genug Platz hat.
+        height = max(700, min(860, self.winfo_screenheight() - 110))
+        width = min(1120, max(980, self.winfo_screenwidth() - 160))
+        self.geometry(f"{width}x{height}")
+        self.minsize(940, 700)
 
         self.sources: list[Path] = []
         self._busy = False
@@ -160,11 +178,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self.after(80, self._drain_events)
 
     def _build(self) -> None:
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(4, weight=1)
+        # Links die Bedienung, rechts das Protokoll über die volle Höhe.
+        self.grid_columnconfigure(0, weight=3, minsize=600)
+        self.grid_columnconfigure(1, weight=2, minsize=300)
+        self.grid_rowconfigure(1, weight=1)
 
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(18, 8))
+        header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=20, pady=(18, 8))
         header.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
@@ -177,9 +197,8 @@ class ConverterApp(ctk.CTk, _DnDBase):
             header,
             text="Über…",
             width=80,
-            fg_color="transparent",
-            border_width=1,
             command=self._show_about,
+            **SECONDARY_BUTTON,
         ).grid(row=0, column=1, sticky="e", padx=(12, 0))
         ctk.CTkLabel(
             header,
@@ -191,14 +210,14 @@ class ConverterApp(ctk.CTk, _DnDBase):
         ctk.CTkLabel(
             header,
             text="PDF, Word, PowerPoint und Excel lokal mit Microsoft MarkItDown wandeln — ohne Cloud.",
-            wraplength=700,
+            wraplength=900,
             justify="left",
             text_color=("gray30", "gray70"),
             anchor="w",
         ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
         files_box = ctk.CTkFrame(self)
-        files_box.grid(row=1, column=0, sticky="nsew", padx=20, pady=8)
+        files_box.grid(row=1, column=0, sticky="nsew", padx=(20, 8), pady=8)
         files_box.grid_columnconfigure(0, weight=1)
         files_box.grid_rowconfigure(1, weight=1)
 
@@ -214,17 +233,16 @@ class ConverterApp(ctk.CTk, _DnDBase):
             file_bar,
             text="Liste leeren",
             width=110,
-            fg_color="transparent",
-            border_width=1,
             command=self._clear_files,
+            **SECONDARY_BUTTON,
         ).pack(side="right")
 
-        self.file_box = ctk.CTkTextbox(files_box, height=120, wrap="none")
+        self.file_box = ctk.CTkTextbox(files_box, height=80, wrap="none")
         self.file_box.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.file_box.configure(state="disabled")
 
         out_box = ctk.CTkFrame(self)
-        out_box.grid(row=2, column=0, sticky="ew", padx=20, pady=8)
+        out_box.grid(row=2, column=0, sticky="ew", padx=(20, 8), pady=8)
         out_box.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(out_box, text="Ausgabe", font=ctk.CTkFont(weight="bold")).grid(
@@ -267,7 +285,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
             text="",
             anchor="w",
             justify="left",
-            wraplength=680,
+            wraplength=560,
             text_color=("gray30", "gray70"),
         )
         self.profile_hint.grid(row=4, column=0, columnspan=3, sticky="w", padx=12, pady=(0, 6))
@@ -314,7 +332,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self._on_profile_change(converter.DEFAULT_PROFILE)
 
         action = ctk.CTkFrame(self, fg_color="transparent")
-        action.grid(row=3, column=0, sticky="ew", padx=20, pady=(4, 8))
+        action.grid(row=3, column=0, sticky="ew", padx=(20, 8), pady=(4, 16))
         action.grid_columnconfigure(0, weight=1)
 
         self.convert_btn = ctk.CTkButton(
@@ -334,13 +352,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self.status.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
         log_box = ctk.CTkFrame(self)
-        log_box.grid(row=4, column=0, sticky="nsew", padx=20, pady=(0, 16))
+        log_box.grid(row=1, column=1, rowspan=3, sticky="nsew", padx=(8, 20), pady=(8, 16))
         log_box.grid_columnconfigure(0, weight=1)
         log_box.grid_rowconfigure(1, weight=1)
         ctk.CTkLabel(log_box, text="Protokoll", font=ctk.CTkFont(weight="bold")).grid(
             row=0, column=0, sticky="w", padx=12, pady=(10, 4)
         )
-        self.log = ctk.CTkTextbox(log_box, wrap="word")
+        self.log = ctk.CTkTextbox(log_box, wrap="word", width=300)
         self.log.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
         self.log.configure(state="disabled")
 
@@ -367,8 +385,23 @@ class ConverterApp(ctk.CTk, _DnDBase):
         window.resizable(False, False)
         window.transient(self)
         ctk.CTkLabel(window, text=about_text(), justify="left", wraplength=420).pack(
-            padx=24, pady=(20, 12), anchor="w"
+            padx=24, pady=(20, 6), anchor="w"
         )
+        links = ctk.CTkFrame(window, fg_color="transparent")
+        links.pack(fill="x", padx=24, pady=(0, 12))
+        for label, url in (
+            (APP_WEBSITE.removeprefix("https://"), APP_WEBSITE),
+            ("Quellcode auf GitHub", APP_HOMEPAGE),
+        ):
+            link = ctk.CTkLabel(
+                links,
+                text=label,
+                text_color=("#1f5fa8", "#6aa8ff"),
+                font=ctk.CTkFont(underline=True),
+                cursor="pointinghand" if _is_macos() else "hand2",
+            )
+            link.pack(side="left", padx=(0, 16))
+            link.bind("<Button-1>", lambda _event, target=url: webbrowser.open(target))
         buttons = ctk.CTkFrame(window, fg_color="transparent")
         buttons.pack(fill="x", padx=24, pady=(0, 20))
         notices = third_party_notices_path()
