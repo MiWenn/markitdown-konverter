@@ -76,7 +76,7 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "2.0.2"
+    return "2.0.3"
 
 
 def about_text() -> str:
@@ -654,6 +654,13 @@ class ConverterApp(ctk.CTk, _DnDBase):
                 details.append(f"{report.removed_lines} Kopf-/Fußzeile(n) entfernt")
             extra = f"  ({', '.join(details)})" if details else ""
             self._events.put(("log", f"    gespeichert: {report.target}{extra}"))
+            if report.images:
+                folder = converter.image_folder_for(report.target).name
+                self._events.put((
+                    "log",
+                    f"    Bilder im Ordner „{folder}“: Markdown-Datei und Ordner "
+                    "immer zusammen verschieben, sonst fehlen die Bilder.",
+                ))
             for warning in report.warnings:
                 self._events.put(("log", f"    Hinweis: {warning}"))
 

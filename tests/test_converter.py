@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import tempfile
 import unittest
 from unittest import mock
@@ -11,8 +12,11 @@ from pathlib import Path
 import converter
 
 
-def build_simple_pdf(text: str) -> bytes:
-    """Minimal gültiges PDF mit einer Textzeile (pdfminer-lesbar)."""
+def build_simple_pdf(text: str, *, content: str | None = None) -> bytes:
+    """Minimal gültiges PDF mit einer Textzeile (pdfminer-lesbar).
+
+    Mit content lässt sich der Seiteninhalt (PDF-Operatoren) direkt vorgeben.
+    """
     safe = (
         text.replace("\\", "\\\\")
         .replace("(", "\\(")
@@ -20,7 +24,8 @@ def build_simple_pdf(text: str) -> bytes:
         .encode("latin-1", "replace")
         .decode("latin-1")
     )
-    content = f"BT /F1 24 Tf 72 720 Td ({safe}) Tj ET\n"
+    if content is None:
+        content = f"BT /F1 24 Tf 72 720 Td ({safe}) Tj ET\n"
     bodies = [
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -286,6 +291,46 @@ class ProfileTests(unittest.TestCase):
             self.assertTrue(text.startswith("---\ntitle: "))
             self.assertIn("[Seite 1]", text)
             self.assertNotIn("\f", text)
+
+
+class DesignPdfTests(unittest.TestCase):
+    def test_italic_is_not_tilted(self) -> None:
+        self.assertFalse(converter._is_tilted((12, 0, 2.5, 12, 0, 0)))  # kursiv geneigt
+        self.assertTrue(converter._is_tilted((11.8, 2.1, -2.1, 11.8, 0, 0)))  # 10° gedreht
+        self.assertTrue(converter._is_tilted((0, 12, -12, 0, 0, 0)))  # 90° gedreht
+
+    def test_tilted_chars_become_lines(self) -> None:
+        angle = math.radians(10)
+        a, b = 20 * math.cos(angle), 20 * math.sin(angle)
+        chars = []
+        for line, text in enumerate(["Aus-", "nahmen:"]):
+            for i, char in enumerate(text):
+                along, across = 100 + i * 12, 500 - line * 24
+                e = along * math.cos(angle) - across * math.sin(angle)
+                f = along * math.sin(angle) + across * math.cos(angle)
+                chars.append({"matrix": (a, b, -b, a, e, f), "text": char})
+        chars.reverse()  # Reihenfolge im PDF darf keine Rolle spielen
+        self.assertEqual(converter._tilted_text_blocks(chars), ["Ausnahmen:"])
+
+    def test_dot_leaders_are_removed(self) -> None:
+        text = "Logo 7\n.......................\nFarben ........ 10\nSo ... bleibt das."
+        self.assertEqual(
+            converter.remove_dot_leaders(text), "Logo 7\nFarben 10\nSo ... bleibt das."
+        )
+
+    def test_tilted_text_in_pdf_is_readable(self) -> None:
+        content = (
+            "BT /F1 14 Tf 72 720 Td (Gerader Fliesstext auf der Seite) Tj ET\n"
+            "BT /F1 30 Tf 0.985 0.174 -0.174 0.985 250 400 Tm (Stand: Dezember 2021) Tj ET\n"
+        )
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "design.pdf"
+            pdf.write_bytes(build_simple_pdf("", content=content))
+            text = converter.convert_file(pdf, folder / "design.md").read_text(encoding="utf-8")
+        self.assertIn("Gerader Fliesstext auf der Seite", text)
+        self.assertIn("Stand: Dezember 2021", text)
+        self.assertNotRegex(text, r"(?m)^\S$")  # keine einzelnen Buchstaben je Zeile
 
 
 class FrozenMessageTests(unittest.TestCase):
