@@ -53,6 +53,9 @@ HEADER_MIN_SHARE = 0.6
 HEADER_MIN_PAGES = 3
 HEADER_EDGE_LINES = 2
 
+# Ab diesem Drehanteil (Sinus des Winkels, ≈ 1°) gilt ein Zeichen als schräg gesetzt.
+TILT_TOLERANCE = 0.02
+
 # Word-Formatvorlagen „Titel“/„Untertitel“ sind keine Überschriften im Sinne von Word,
 # sollen in Markdown aber welche werden (Mammoth-Style-Map).
 DOCX_STYLE_MAP = "p[style-name='Title'] => h1:fresh\np[style-name='Subtitle'] => h2:fresh"
@@ -383,12 +386,143 @@ def ocr_pdf(source: Path) -> list[str]:
         pdf.close()
 
 
-def _pdf_pages_text(source: Path) -> list[str] | None:
+def _is_tilted(matrix: Sequence[float]) -> bool:
+    """Schräg oder gedreht gesetztes Zeichen: Die Grundlinie verläuft nicht waagerecht.
+
+    Nur der Drehanteil zählt; kursive Schrift ist geneigt, aber nicht gedreht.
+    """
+    a, b = matrix[0], matrix[1]
+    return abs(b) > TILT_TOLERANCE * max(abs(a), abs(b))
+
+
+def _tilted_text_blocks(chars: Sequence[dict]) -> list[str]:
+    """Setzt schräg/gedreht gesetzten Text wieder zu Zeilen und Absätzen zusammen.
+
+    Die Zeichen werden in das Koordinatensystem ihrer eigenen Grundlinie gedreht;
+    dort liegen sie wieder ordentlich nebeneinander wie waagerechter Text.
+    """
+    groups: dict[int, list[tuple[float, float, float, str]]] = {}
+    for char in chars:
+        a, b, _c, _d, e, f = char["matrix"]
+        angle = math.atan2(b, a)
+        cos, sin = math.cos(angle), math.sin(angle)
+        # Schriftgröße: steckt je nach PDF in der Matrix oder separat (pdfplumber „size“).
+        scale = float(char.get("size") or math.hypot(a, b) or 1.0)
+        along = e * cos + f * sin
+        across = -e * sin + f * cos
+        groups.setdefault(round(math.degrees(angle)), []).append(
+            (across, along, scale, char["text"])
+        )
+
+    blocks: list[str] = []
+    for glyphs in groups.values():
+        glyphs.sort(key=lambda g: (-g[0], g[1]))
+        lines: list[list[tuple[float, float, float, str]]] = []
+        for glyph in glyphs:
+            if lines and lines[-1][0][0] - glyph[0] < glyph[2] * 0.5:
+                lines[-1].append(glyph)
+            else:
+                lines.append([glyph])
+
+        # Weit auseinanderliegende Teile einer Zeile sind eigene Texte (z. B. mehrere Plakate).
+        segments: list[tuple[float, float, float, float, str]] = []
+        for line in lines:
+            line.sort(key=lambda g: g[1])
+            parts: list[list[tuple[float, float, float, str]]] = [[]]
+            for glyph in line:
+                if parts[-1] and glyph[1] - parts[-1][-1][1] > glyph[2] * 3:
+                    parts.append([])
+                parts[-1].append(glyph)
+            for part in parts:
+                text, last_along = "", None
+                for _across, along, scale, char in part:
+                    if last_along is not None and along - last_along > scale * 1.2 and not text.endswith(" "):
+                        text += " "
+                    text += char
+                    last_along = along
+                text = re.sub(r"\s+", " ", text).strip()
+                if text:
+                    segments.append((part[0][0], part[0][1], part[-1][1], part[0][2], text))
+
+        # Untereinanderstehende Zeilen, die sich seitlich überlappen, bilden einen Absatz.
+        paragraphs: list[list[str]] = []
+        tails: list[tuple[float, float, float]] = []
+        for across, start, end, scale, text in segments:
+            for index, (last_across, last_start, last_end) in enumerate(tails):
+                if (
+                    0 < last_across - across <= scale * 2
+                    and start <= last_end + scale
+                    and end >= last_start - scale
+                ):
+                    paragraphs[index].append(text)
+                    tails[index] = (across, start, end)
+                    break
+            else:
+                paragraphs.append([text])
+                tails.append((across, start, end))
+
+        for lines_text in paragraphs:
+            block = " ".join(lines_text)
+            # Trennstriche am Zeilenende: „Aus- nahmen“ → „Ausnahmen“, „Set- Design“ → „Set-Design“
+            block = re.sub(r"(?<=\w)- (?=[a-zäöüß])", "", block)
+            block = re.sub(r"(?<=\w)- (?=[A-ZÄÖÜ])", "-", block)
+            if block not in blocks:
+                blocks.append(block)
+    return blocks
+
+
+def _pdfminer_pages_without_tilted(source: Path) -> list[str]:
+    """Wie pdfminer.extract_text, aber ohne schräg oder gedreht gesetzte Zeichen."""
+    from pdfminer.high_level import extract_pages
+    from pdfminer.layout import LTChar, LTContainer, LTText, LTTextBox
+
+    pages: list[str] = []
+    for layout in extract_pages(str(source)):
+        parts: list[str] = []
+
+        def render(item) -> None:
+            if isinstance(item, LTChar) and _is_tilted(item.matrix):
+                return
+            if isinstance(item, LTContainer):
+                for child in item:
+                    render(child)
+            elif isinstance(item, LTText):
+                parts.append(item.get_text())
+            if isinstance(item, LTTextBox):
+                parts.append("\n")
+
+        render(layout)
+        lines = [line.strip() for line in "".join(parts).splitlines()]
+        pages.append(re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip())
+    return pages
+
+
+_DOT_LEADER = re.compile(r"[ \t]*(?:\.{4,}|…{2,}|(?:\. ){3,}\.)[ \t]*")
+
+
+def remove_dot_leaders(text: str) -> str:
+    """Entfernt Punktreihen aus Inhaltsverzeichnissen („Logo ........ 7“ → „Logo 7“)."""
+    lines = []
+    for line in text.split("\n"):
+        cleaned = _DOT_LEADER.sub(" ", line)
+        if cleaned != line:
+            cleaned = cleaned.strip()
+            if not cleaned:
+                continue  # Zeile bestand nur aus Punkten
+        lines.append(cleaned)
+    return "\n".join(lines)
+
+
+def _pdf_pages_text(source: Path, *, fix_tilted: bool = False) -> list[str] | None:
     """Text je Seite, auf demselben Weg wie MarkItDown.
 
     MarkItDown liefert die Seitengrenzen nicht immer mit (bei Tabellen-PDFs und bei
     einseitigen PDFs). Wie MarkItDown: Gibt es keine Formular-/Tabellenseiten, liest
     pdfminer das ganze Dokument (bessere Absätze), sonst pdfplumber Seite für Seite.
+
+    Mit fix_tilted wird schräg oder gedreht gesetzter Text (z. B. in Design-PDFs) aus
+    dem Fließtext herausgenommen, weil er dort Buchstabe für Buchstabe zerfällt, und
+    am Ende der jeweiligen Seite als lesbare Zeile angehängt.
     """
     try:
         import pdfminer.high_level
@@ -399,23 +533,54 @@ def _pdf_pages_text(source: Path) -> list[str] | None:
     extract_form = getattr(md_pdf, "_extract_form_content_from_words", None)
     merge_numbering = getattr(md_pdf, "_merge_partial_numbering_lines", lambda text: text)
 
+    def upright(obj: dict) -> bool:
+        return obj.get("object_type") != "char" or not _is_tilted(obj["matrix"])
+
     pages: list[str] = []
+    tilted: list[list[str]] = []
     has_form_page = False
     with pdfplumber.open(str(source)) as pdf:
         for page in pdf.pages:
-            content = extract_form(page) if extract_form is not None else None
+            blocks = _tilted_text_blocks(
+                [c for c in page.chars if _is_tilted(c["matrix"])]
+            ) if fix_tilted else []
+            view = page.filter(upright) if blocks else page
+            content = extract_form(view) if extract_form is not None else None
             if content is not None:
                 has_form_page = True
             else:
-                content = page.extract_text() or ""
+                content = view.extract_text() or ""
             pages.append(content)
+            tilted.append(blocks)
             page.close()
 
     if not has_form_page:
-        by_page = split_pages(pdfminer.high_level.extract_text(str(source)))
-        if by_page is not None:
-            pages = by_page
-    return [merge_numbering(page).strip() for page in pages]
+        if any(tilted):
+            pages = _pdfminer_pages_without_tilted(source)
+        else:
+            by_page = split_pages(pdfminer.high_level.extract_text(str(source)))
+            if by_page is not None:
+                pages = by_page
+    result = []
+    for index, page in enumerate(pages):
+        extra = tilted[index] if index < len(tilted) else []
+        result.append("\n\n".join([merge_numbering(page).strip(), *extra]).strip())
+    return result
+
+
+def has_tilted_text(source: Path) -> bool:
+    """Prüft, ob ein PDF schräg oder gedreht gesetzten Text enthält."""
+    try:
+        import pdfplumber
+    except ImportError:
+        return False
+    with pdfplumber.open(str(source)) as pdf:
+        for page in pdf.pages:
+            found = any(_is_tilted(c["matrix"]) for c in page.chars)
+            page.close()
+            if found:
+                return True
+    return False
 
 
 def split_pages(markdown: str) -> list[str] | None:
@@ -637,13 +802,16 @@ def convert_document(
                     report.ocr_pages = len(pages)
                     if not page_markers:
                         pages = [page or "*(kein Text erkannt)*" for page in pages]
-            if pages is None and (page_markers or strip_headers):
+            if not report.ocr_pages and has_tilted_text(source):
+                pages = _pdf_pages_text(source, fix_tilted=True) or pages
+            elif pages is None and (page_markers or strip_headers):
                 pages = _pdf_pages_text(source)
 
             if pages is not None:
                 if strip_headers:
                     pages, report.removed_lines = remove_repeating_lines(pages)
                 markdown = join_pages(pages, page_markers=page_markers)
+            markdown = remove_dot_leaders(markdown)
             if report.ocr_pages:
                 markdown = (
                     "*Text per Texterkennung (OCR) aus gescannten Seiten gewonnen. "
