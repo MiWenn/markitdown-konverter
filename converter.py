@@ -431,6 +431,23 @@ def _pdf_page_count(source: Path) -> int:
         pdf.close()
 
 
+def pdf_has_images(source: Path) -> bool:
+    """Enthält das PDF überhaupt Bilder? Ohne Bild gibt es nichts zu erkennen."""
+    try:
+        import pypdfium2 as pdfium
+        from pypdfium2 import raw as pdfium_raw
+    except ImportError:
+        return True  # im Zweifel wie bisher als Scan behandeln
+    pdf = pdfium.PdfDocument(str(source))
+    try:
+        for page in pdf:
+            if any(True for _ in page.get_objects(filter=(pdfium_raw.FPDF_PAGEOBJ_IMAGE,), max_depth=2)):
+                return True
+        return False
+    finally:
+        pdf.close()
+
+
 def looks_scanned(markdown: str, page_count: int) -> bool:
     return _visible_chars(markdown) < SCAN_CHARS_PER_PAGE * max(page_count, 1)
 
@@ -926,7 +943,11 @@ def convert_document(
         if is_pdf:
             page_count = _pdf_page_count(source)
             pages = split_pages(markdown)
-            if looks_scanned(markdown, page_count):
+            # Kurzer echter Text (z. B. ein Einzeiler) ist kein Scan: Ohne Bilder bleibt er,
+            # wie er ist, statt von der Texterkennung überschrieben zu werden.
+            if looks_scanned(markdown, page_count) and (
+                _visible_chars(markdown) == 0 or pdf_has_images(source)
+            ):
                 if not ocr:
                     report.warnings.append(
                         "Das PDF enthält kaum Text, vermutlich ein Scan. "

@@ -214,6 +214,15 @@ class ScanTests(unittest.TestCase):
             report = converter.convert_document(pdf, folder / "leer.md", ocr=False)
             self.assertTrue(any("Scan" in w for w in report.warnings))
 
+    def test_short_real_text_is_not_treated_as_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            folder = Path(raw)
+            pdf = folder / "kurz.pdf"
+            pdf.write_bytes(build_simple_pdf("Hallo MarkItDown Probe"))
+            report = converter.convert_document(pdf, folder / "kurz.md")
+            self.assertEqual(report.ocr_pages, 0)
+            self.assertIn("Hallo MarkItDown Probe", (folder / "kurz.md").read_text(encoding="utf-8"))
+
     @unittest.skipUnless(converter.ocr_available(), "Texterkennung nur auf Mac (ocrmac) oder Windows (winrt)")
     def test_scanned_pdf_is_read_with_ocr(self) -> None:
         from PIL import Image, ImageDraw, ImageFont
