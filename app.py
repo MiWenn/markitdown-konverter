@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 import queue
 import subprocess
 import sys
@@ -59,8 +60,35 @@ FILE_TYPES = [
 ]
 
 
+# Das Protokoll wächst sonst den ganzen Tag weiter, wenn die App offen bleibt.
+LOG_MAX_LINES = 2000
+
+
 def _is_macos() -> bool:
     return sys.platform == "darwin"
+
+
+def avoid_tk_console() -> bool:
+    """Verhindert das versteckte Tk-Konsolenfenster auf dem Mac.
+
+    Aus Finder oder Dock gestartet, ist die Standardeingabe /dev/null. Tk legt dann
+    ein unsichtbares Konsolenfenster samt eigener Menüleiste an, und genau dabei
+    stürzt die App unter macOS 26 gelegentlich schon beim Start ab
+    (NSMenuItem ohne Titel). Eine leere Pipe als Standardeingabe schaltet die
+    Konsole ab; die App braucht sie nicht.
+    """
+    if not _is_macos():
+        return False
+    try:
+        if os.isatty(0):
+            return False
+        read_end, write_end = os.pipe()
+        os.dup2(read_end, 0)
+        os.close(read_end)
+        os.close(write_end)
+    except OSError:
+        return False
+    return True
 
 
 def _read_version() -> str:
@@ -76,7 +104,7 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "2.0.3"
+    return "2.0.4"
 
 
 def about_text() -> str:
@@ -129,8 +157,6 @@ def open_with_default_app(path: Path) -> None:
     if _is_macos():
         subprocess.run(["open", "-t", str(path)], check=False)
     elif _is_windows():
-        import os
-
         os.startfile(str(path))  # noqa: S606 - öffnet nur unsere eigene Textdatei
     else:
         subprocess.run(["xdg-open", str(path)], check=False)
@@ -163,6 +189,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
         self.sources: list[Path] = []
         self._busy = False
         self._events: queue.Queue = queue.Queue()
+        self._about_window: ctk.CTkToplevel | None = None
 
         self._build()
         self._dnd_enabled = self._enable_drag_and_drop()
@@ -170,6 +197,8 @@ class ConverterApp(ctk.CTk, _DnDBase):
         if _is_macos():
             # Dateien, die aufs Dock-Symbol gezogen oder per „Öffnen mit“ geschickt werden
             self.createcommand("::tk::mac::OpenDocument", self._on_open_document)
+            # Klick aufs Dock-Symbol, wenn die App schon läuft
+            self.createcommand("::tk::mac::ReopenApplication", self.bring_to_front)
         self._bind_macos_about()
         self._apply_window_icon()
         self._check_backend()
@@ -379,8 +408,33 @@ class ConverterApp(ctk.CTk, _DnDBase):
         except tk.TclError:
             pass
 
+    def bring_to_front(self, *_args) -> None:
+        """Holt das Fenster zurück: aus dem Dock, hinter anderen Fenstern hervor und
+        auf den Bildschirm, falls es nach dem Abstecken eines Monitors außerhalb liegt."""
+        try:
+            self.deiconify()
+            self.update_idletasks()
+            x, y = self.winfo_x(), self.winfo_y()
+            width, height = self.winfo_width(), self.winfo_height()
+            screen_w, screen_h = self.winfo_screenwidth(), self.winfo_screenheight()
+            if x + width < 120 or y < 0 or x > screen_w - 120 or y > screen_h - 120:
+                self.geometry("+60+60")
+            self.lift()
+            self.focus_force()
+            if self._about_window is not None and self._about_window.winfo_exists():
+                self._about_window.lift()
+        except tk.TclError:
+            pass
+
     def _show_about(self) -> None:
+        # Nur ein Über-Fenster; ein zweites Mal „Über…“ holt es nach vorn.
+        if self._about_window is not None and self._about_window.winfo_exists():
+            self._about_window.deiconify()
+            self._about_window.lift()
+            self._about_window.focus_force()
+            return
         window = ctk.CTkToplevel(self)
+        self._about_window = window
         window.title(f"Über {APP_TITLE}")
         window.resizable(False, False)
         window.transient(self)
@@ -414,7 +468,9 @@ class ConverterApp(ctk.CTk, _DnDBase):
         ctk.CTkButton(buttons, text="Schließen", width=100, command=window.destroy).pack(
             side="right"
         )
-        window.after(50, window.grab_set)
+        # Bewusst ohne grab_set: Rutscht das Über-Fenster hinter das Hauptfenster,
+        # bliebe das Hauptfenster sonst gesperrt und ließe sich nicht mehr bedienen.
+        window.after(50, window.lift)
 
     def _apply_window_icon(self) -> None:
         if not _is_windows():
@@ -722,6 +778,9 @@ class ConverterApp(ctk.CTk, _DnDBase):
     def _log(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text.rstrip() + "\n")
+        lines = int(self.log.index("end-1c").split(".")[0])
+        if lines > LOG_MAX_LINES:
+            self.log.delete("1.0", f"{lines - LOG_MAX_LINES + 1}.0")
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -743,6 +802,7 @@ def main() -> int:
 
         multiprocessing.freeze_support()
     converter.check_python_version()
+    avoid_tk_console()  # muss vor dem ersten Tk-Fenster passieren
     ctk.set_appearance_mode("system")
     ctk.set_default_color_theme("blue")
 
