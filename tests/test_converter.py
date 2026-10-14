@@ -214,7 +214,7 @@ class ScanTests(unittest.TestCase):
             report = converter.convert_document(pdf, folder / "leer.md", ocr=False)
             self.assertTrue(any("Scan" in w for w in report.warnings))
 
-    @unittest.skipUnless(converter.ocr_available(), "Texterkennung nur auf dem Mac mit ocrmac")
+    @unittest.skipUnless(converter.ocr_available(), "Texterkennung nur auf Mac (ocrmac) oder Windows (winrt)")
     def test_scanned_pdf_is_read_with_ocr(self) -> None:
         from PIL import Image, ImageDraw, ImageFont
 

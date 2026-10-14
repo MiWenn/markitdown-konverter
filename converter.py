@@ -197,9 +197,14 @@ def _windows_ocr_observations(engine, image) -> list:
     import asyncio
 
     from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap
+    from winrt.windows.media.ocr import OcrEngine
     from winrt.windows.storage.streams import DataWriter
 
-    limit = int(engine.max_image_dimension or 0)
+    # Größte Bildkante, die Windows annimmt (Eigenschaft der Klasse, nicht der Instanz)
+    try:
+        limit = int(OcrEngine.max_image_dimension or 0)
+    except Exception:
+        limit = 0
     if limit and max(image.size) > limit:
         factor = limit / max(image.size)
         image = image.resize((int(image.width * factor), int(image.height * factor)))
