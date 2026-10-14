@@ -27,6 +27,7 @@ COLLECT_PACKAGES = [
     "tkinterdnd2",  # Drag & Drop, bringt tkdnd-Binärdateien mit
     "pypdfium2",  # PDF-Bilder und Seiten für die Texterkennung
     "pypdfium2_raw",
+    "winrt",  # Windows-Texterkennung (Windows.Media.Ocr) für gescannte PDFs
 ]
 
 METADATA_DISTS = [
@@ -58,6 +59,13 @@ datas = []
 binaries = []
 hiddenimports = [
     "converter",
+    "pdf_layout",
+    "winrt.windows.foundation",
+    "winrt.windows.foundation.collections",
+    "winrt.windows.globalization",
+    "winrt.windows.graphics.imaging",
+    "winrt.windows.media.ocr",
+    "winrt.windows.storage.streams",
     "tkinter",
     "tkinter.filedialog",
     "tkinter.messagebox",

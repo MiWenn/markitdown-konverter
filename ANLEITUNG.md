@@ -121,10 +121,10 @@ bericht_bilder/       ← die Bilder aus dem Dokument
 
 ### Gut zu wissen
 
-- **Gescannte PDFs** (nur Bilder, kein markierbarer Text) liest die App auf dem Mac mit der Texterkennung von macOS. Unter Windows gibt es diese Funktion nicht. Dann erscheint ein Hinweis.
+- **Gescannte PDFs** (nur Bilder, kein markierbarer Text) liest die App mit der Texterkennung, die Mac und Windows 10/11 schon eingebaut haben. Bitte den erkannten Text kurz auf Lesefehler prüfen.
 - **Bilder in PDFs** stehen gesammelt am Ende der Markdown-Datei, nach Seiten sortiert. Bei Word und PowerPoint stehen sie an der richtigen Stelle im Text.
 - **Kopf- und Fußzeilen**, die sich auf jeder Seite wiederholen (z. B. „Seite 3 von 20“), entfernt die App bei PDFs automatisch. Abschalten kannst du das mit dem entsprechenden Häkchen.
-- **Mehrspaltige PDFs, komplizierte Tabellen und Fußnoten** kommen nicht immer in perfekter Reihenfolge heraus. Schau bei wichtigen Dokumenten kurz drüber.
+- **Überschriften, Tabellen, Spalten und Fußnoten** erkennt die App in PDFs selbst: Überschriften werden zu `#`, Tabellen mit Linien zu Markdown-Tabellen, zweispaltige Seiten werden Spalte für Spalte gelesen, Fußnoten stehen als `[^1]` am Ende. Bei stark gestalteten PDFs (Plakate, Broschüren mit frei verteilten Textblöcken, Tabellen ohne Linien) klappt das nicht immer. Schau bei wichtigen Dokumenten kurz drüber.
 
 ---
 

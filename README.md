@@ -23,7 +23,8 @@ Beim ersten Öffnen warnen Mac und Windows, weil die App nicht signiert ist. Wie
 - Ausgabe automatisch vorschlagen: gleicher Ordner, gleicher Dateiname, Endung `.md`
 - Optional eigenen Zielpfad oder Zielordner wählen
 - **Bilder** aus Word, PowerPoint und PDF als Dateien speichern (Ordner `…_bilder` neben der `.md`)
-- **Gescannte PDFs** mit der Texterkennung von macOS (Apple Vision) lesen, ebenfalls lokal (nur Mac)
+- **PDF-Aufbau** erkennen: Überschriften (`#` bis `####`), Tabellen mit Linien als Markdown-Tabelle, zweispaltige Seiten in Lesereihenfolge, Fußnoten als `[^1]` mit Text am Dokumentende
+- **Gescannte PDFs** mit der eingebauten Texterkennung lesen, ebenfalls lokal: Mac mit Apple Vision, Windows 10/11 mit der Windows-Texterkennung
 - Scheitert eine Datei, laufen die übrigen weiter; am Ende gibt es eine Zusammenfassung
 - Fortschritt, Hinweise und Fehlermeldungen im Protokoll anzeigen
 - Nach Erfolg die Datei im Finder (macOS) oder Explorer (Windows) zeigen
@@ -53,7 +54,7 @@ pip install -r requirements.txt
 
 (`python3.13` statt `python3`, weil das bei macOS mitgelieferte `python3` zu alt ist.)
 
-`requirements.txt` installiert MarkItDown mit den Extras `[pdf,docx,pptx,xlsx,xls]`, die Oberfläche `customtkinter`, `tkinterdnd2` für Drag & Drop, `pypdfium2` und `pillow` für PDF-Bilder sowie `ocrmac` für die Texterkennung.
+`requirements.txt` installiert MarkItDown mit den Extras `[pdf,docx,pptx,xlsx,xls]`, die Oberfläche `customtkinter`, `tkinterdnd2` für Drag & Drop, `pypdfium2` und `pillow` für PDF-Bilder sowie für die Texterkennung `ocrmac` (Mac) bzw. die `winrt`-Pakete für Windows.Media.Ocr (Windows).
 
 ## Starten aus dem Quellcode
 
@@ -81,13 +82,15 @@ python3 converter.py bericht.pdf -o ~/Desktop/bericht.md
 1. Dateien oder Ordner **ins Fenster ziehen** oder **Auswählen…** klicken.
 2. Ausgabe: **Neben Quelle** (Standard) oder **Ziel wählen**.
 3. **Profil** wählen: *Standard* (schlichtes Markdown, auch für Notion), *Notizen & Wissensarchiv* (mit YAML-Metadaten-Kopf für Obsidian, Logseq & Co.) oder *KI & Recherche* (zusätzlich Seitenangaben `[Seite 3]`). Das Profil setzt nur Voreinstellungen; alle Häkchen lassen sich einzeln ändern.
-   Weitere Optionen: **Bilder als Dateien speichern**, **Texterkennung für Scans** (Mac), **Kopf- und Fußzeilen entfernen** (PDF).
+   Weitere Optionen: **Bilder als Dateien speichern**, **Texterkennung für Scans** (Mac und Windows 10/11), **Kopf- und Fußzeilen entfernen** (PDF).
 4. **Konvertieren**: Fortschritt erscheint oben, Details im Protokoll.
 5. Fertig: `.md` liegt neben der Quelle bzw. im gewählten Ordner, Bilder im Ordner `…_bilder`.
 
 **Bilder:** In Word und PowerPoint stehen die Bilder an ihrer ursprünglichen Stelle im Text. Bei PDFs lässt sich die Position nicht zuverlässig bestimmen; deshalb sammelt die App sie am Ende unter „Bilder aus dem PDF“, sortiert nach Seite. Sehr kleine Grafiken und Wiederholungen (z. B. ein Logo auf jeder Seite) werden übersprungen.
 
-**Gescannte PDFs:** Enthält ein PDF kaum Text (weniger als 40 Zeichen pro Seite), liest die App es mit der Texterkennung von macOS. Der erkannte Text ist nach Seiten gegliedert und sollte auf Lesefehler geprüft werden. Tabellen und Spalten werden dabei nicht nachgebildet.
+**PDF-Aufbau:** Bei Text-PDFs setzt die App jede Seite aus ihren Textblöcken neu zusammen (`pdf_layout.py`). Text in deutlich größerer Schrift als der Fließtext wird zur Überschrift, kurze fette Zeilen eine Stufe darunter. Tabellen mit sichtbaren Linien werden Markdown-Tabellen; Raster, die eher wie Diagramme aussehen (viele leere Zellen, Linien durch Wörter), bleiben Text. Zweispaltige Seiten werden Spalte für Spalte gelesen. Kleine Zeilen unten auf der Seite, auf die im Text eine hochgestellte Ziffer verweist, werden Fußnoten. Findet diese Analyse weniger Text als MarkItDown, nimmt die App das Ergebnis von MarkItDown.
+
+**Gescannte PDFs:** Enthält ein PDF kaum Text (weniger als 40 Zeichen pro Seite), liest die App es mit der Texterkennung des Betriebssystems (Mac: Apple Vision, Windows 10/11: Windows-Texterkennung, Deutsch oder Englisch muss als Sprache installiert sein). Der erkannte Text ist nach Seiten gegliedert und sollte auf Lesefehler geprüft werden. Tabellen und Spalten werden dabei nicht nachgebildet.
 
 **Kopf- und Fußzeilen:** Zeilen, die am oberen oder unteren Seitenrand auf mindestens 60 % der Seiten wiederkehren (Zahlen werden dabei ignoriert, „Seite 3 von 20“ zählt also als gleich), werden bei PDFs ab drei Seiten entfernt.
 
@@ -185,5 +188,5 @@ Die mitgelieferten Bausteine (u. a. Microsoft MarkItDown, MIT) stehen unter eige
 | MarkItDown ist nicht installiert (Quellcode) | venv aktivieren, dann `pip install -r requirements.txt` |
 | `optional dependency [pdf]` | dieselbe Installation; manuell: `pip install 'markitdown[pdf,docx,pptx,xlsx,xls]'` |
 | Kein Grafikdisplay / TclError | `python3 app.py` in der macOS-Oberfläche starten, nicht per SSH ohne Display |
-| Hinweis „vermutlich ein Scan“ | Mac: Häkchen bei Texterkennung setzen (Quellcode: `pip install -r requirements.txt`); Windows: nicht verfügbar |
+| Hinweis „vermutlich ein Scan“ | Häkchen bei Texterkennung setzen (Quellcode: `pip install -r requirements.txt`); Windows: unter Einstellungen → Zeit und Sprache → Sprache eine Sprache mit Texterkennung hinzufügen |
 | Ziehen ins Fenster geht nicht | `tkinterdnd2` fehlt: `pip install -r requirements.txt`; „Auswählen…“ funktioniert immer |

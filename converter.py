@@ -5,7 +5,8 @@
 
 Nutzt Microsoft MarkItDown (convert_local) für die Umwandlung.
 Bilder werden in einen Ordner neben der Markdown-Datei gespeichert.
-Gescannte PDFs werden mit der Texterkennung von macOS (Apple Vision) gelesen.
+Gescannte PDFs werden mit der eingebauten Texterkennung des Betriebssystems gelesen
+(macOS: Apple Vision, Windows 10/11: Windows.Media.Ocr).
 Keine Cloud-APIs, kein Azure Document Intelligence.
 """
 
@@ -23,6 +24,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Sequence
+
+import pdf_layout
 
 SUPPORTED_EXTENSIONS = {
     ".pdf",
@@ -96,6 +99,9 @@ class ConversionReport:
     images: int = 0
     ocr_pages: int = 0
     removed_lines: int = 0
+    headings: int = 0
+    tables: int = 0
+    footnotes: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -146,15 +152,90 @@ def create_markitdown():
 
 
 def ocr_available() -> bool:
-    """Texterkennung braucht macOS, ocrmac (Apple Vision) und pypdfium2."""
-    if sys.platform != "darwin":
-        return False
+    """Texterkennung: Mac mit ocrmac (Apple Vision), Windows mit der eingebauten
+    Windows-Texterkennung (winrt); jeweils zusätzlich pypdfium2 für die Seitenbilder."""
     try:
-        import ocrmac  # noqa: F401
         import pypdfium2  # noqa: F401
     except ImportError:
         return False
-    return True
+    if sys.platform == "darwin":
+        try:
+            import ocrmac  # noqa: F401
+        except ImportError:
+            return False
+        return True
+    if sys.platform == "win32":
+        return _windows_ocr_engine() is not None
+    return False
+
+
+def _windows_ocr_engine():
+    """Windows-Texterkennung für Deutsch, sonst Englisch, sonst die Sprache des Systems."""
+    try:
+        from winrt.windows.globalization import Language
+        from winrt.windows.media.ocr import OcrEngine
+    except ImportError:
+        return None
+    for tag in OCR_LANGUAGES:
+        try:
+            language = Language(tag)
+            if OcrEngine.is_language_supported(language):
+                engine = OcrEngine.try_create_from_language(language)
+                if engine is not None:
+                    return engine
+        except Exception:
+            continue
+    try:
+        return OcrEngine.try_create_from_user_profile_languages()
+    except Exception:
+        return None
+
+
+def _windows_ocr_observations(engine, image) -> list:
+    """Erkennt eine Seite mit Windows und liefert Zeilen im Format von Apple Vision:
+    (Text, Sicherheit, (x, y, Breite, Höhe)), Werte 0–1, y von unten gemessen."""
+    import asyncio
+
+    from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap
+    from winrt.windows.media.ocr import OcrEngine
+    from winrt.windows.storage.streams import DataWriter
+
+    # Größte Bildkante, die Windows annimmt (Eigenschaft der Klasse, nicht der Instanz)
+    try:
+        limit = int(OcrEngine.max_image_dimension or 0)
+    except Exception:
+        limit = 0
+    if limit and max(image.size) > limit:
+        factor = limit / max(image.size)
+        image = image.resize((int(image.width * factor), int(image.height * factor)))
+    width, height = image.size
+    writer = DataWriter()
+    writer.write_bytes(bytearray(image.convert("RGBA").tobytes("raw", "BGRA")))
+    bitmap = SoftwareBitmap.create_copy_with_alpha_from_buffer(
+        writer.detach_buffer(), BitmapPixelFormat.BGRA8, width, height, BitmapAlphaMode.PREMULTIPLIED
+    )
+
+    async def recognize():
+        return await engine.recognize_async(bitmap)
+
+    result = asyncio.run(recognize())
+    observations = []
+    for line in result.lines:
+        boxes = [word.bounding_rect for word in line.words]
+        if not boxes:
+            continue
+        left = min(box.x for box in boxes)
+        top = min(box.y for box in boxes)
+        right = max(box.x + box.width for box in boxes)
+        bottom = max(box.y + box.height for box in boxes)
+        observations.append((
+            line.text,
+            1.0,
+            (left / width, 1 - bottom / height, (right - left) / width, (bottom - top) / height),
+        ))
+    # Wie Apple Vision von oben nach unten
+    observations.sort(key=lambda item: -(item[2][1] + item[2][3]))
+    return observations
 
 
 def pdf_images_available() -> bool:
@@ -350,6 +431,23 @@ def _pdf_page_count(source: Path) -> int:
         pdf.close()
 
 
+def pdf_has_images(source: Path) -> bool:
+    """Enthält das PDF überhaupt Bilder? Ohne Bild gibt es nichts zu erkennen."""
+    try:
+        import pypdfium2 as pdfium
+        from pypdfium2 import raw as pdfium_raw
+    except ImportError:
+        return True  # im Zweifel wie bisher als Scan behandeln
+    pdf = pdfium.PdfDocument(str(source))
+    try:
+        for page in pdf:
+            if any(True for _ in page.get_objects(filter=(pdfium_raw.FPDF_PAGEOBJ_IMAGE,), max_depth=2)):
+                return True
+        return False
+    finally:
+        pdf.close()
+
+
 def looks_scanned(markdown: str, page_count: int) -> bool:
     return _visible_chars(markdown) < SCAN_CHARS_PER_PAGE * max(page_count, 1)
 
@@ -368,19 +466,29 @@ def _ocr_page_text(observations: list) -> str:
 
 
 def ocr_pdf(source: Path) -> list[str]:
-    """Liest ein gescanntes PDF Seite für Seite mit Apple Vision. Liefert den Text je Seite."""
+    """Liest ein gescanntes PDF Seite für Seite mit der Texterkennung des Systems.
+    Liefert den Text je Seite."""
     import pypdfium2 as pdfium
-    from ocrmac import ocrmac
+
+    if sys.platform == "win32":
+        engine = _windows_ocr_engine()
+        if engine is None:
+            raise ConverterError("Die Windows-Texterkennung ist auf diesem Computer nicht verfügbar.")
+
+        def recognize(image) -> list:
+            return _windows_ocr_observations(engine, image)
+    else:
+        from ocrmac import ocrmac
+
+        def recognize(image) -> list:
+            return ocrmac.OCR(image, language_preference=OCR_LANGUAGES).recognize()
 
     pdf = pdfium.PdfDocument(str(source))
     pages: list[str] = []
     try:
         for page in pdf:
             image = page.render(scale=OCR_RENDER_SCALE).to_pil()
-            observations = ocrmac.OCR(
-                image, language_preference=OCR_LANGUAGES
-            ).recognize()
-            pages.append(_ocr_page_text(observations))
+            pages.append(_ocr_page_text(recognize(image)))
         return pages
     finally:
         pdf.close()
@@ -566,6 +674,55 @@ def _pdf_pages_text(source: Path, *, fix_tilted: bool = False) -> list[str] | No
         extra = tilted[index] if index < len(tilted) else []
         result.append("\n\n".join([merge_numbering(page).strip(), *extra]).strip())
     return result
+
+
+def _comparable(text: str) -> int:
+    """Buchstaben und Ziffern, ohne Markdown-Zeichen wie # oder |."""
+    return len(re.sub(r"[\W_]", "", text))
+
+
+def structured_pdf(source: Path, reference: str = ""):
+    """Seiten mit Überschriften, Tabellen, Spalten und Fußnoten (siehe pdf_layout).
+
+    None, wenn die Analyse nicht klappt oder deutlich weniger Text findet als
+    MarkItDown (reference); dann bleibt es beim bisherigen Weg.
+    """
+    try:
+        from markitdown.converters import _pdf_converter as md_pdf
+    except ImportError:
+        return None
+    merge_numbering = getattr(md_pdf, "_merge_partial_numbering_lines", lambda text: text)
+
+    extract_form = getattr(md_pdf, "_extract_form_content_from_words", None)
+
+    def tilted_blocks(page) -> list[str]:
+        return _tilted_text_blocks([c for c in page.chars if _is_tilted(c["matrix"])])
+
+    def form_content(page) -> str | None:
+        # Schräge Buchstaben würden sonst als Tabellenspalten gedeutet
+        upright = page.filter(
+            lambda obj: obj.get("object_type") != "char" or not _is_tilted(obj["matrix"])
+        )
+        return extract_form(upright)
+
+    try:
+        layout = pdf_layout.analyze_pdf(
+            source,
+            skip_char=lambda char: _is_tilted(char.matrix),
+            form_content=form_content if extract_form is not None else None,
+            page_extra=tilted_blocks,
+        )
+    except Exception:
+        return None
+    if layout is None:
+        return None
+    layout.pages = [merge_numbering(page).strip() for page in layout.pages]
+    found = _comparable("\n".join(layout.pages)) + _comparable(
+        "\n".join(text for _label, text in layout.footnotes)
+    )
+    if found < _comparable(reference) * 0.85:
+        return None
+    return layout
 
 
 def has_tilted_text(source: Path) -> bool:
@@ -786,7 +943,11 @@ def convert_document(
         if is_pdf:
             page_count = _pdf_page_count(source)
             pages = split_pages(markdown)
-            if looks_scanned(markdown, page_count):
+            # Kurzer echter Text (z. B. ein Einzeiler) ist kein Scan: Ohne Bilder bleibt er,
+            # wie er ist, statt von der Texterkennung überschrieben zu werden.
+            if looks_scanned(markdown, page_count) and (
+                _visible_chars(markdown) == 0 or pdf_has_images(source)
+            ):
                 if not ocr:
                     report.warnings.append(
                         "Das PDF enthält kaum Text, vermutlich ein Scan. "
@@ -795,14 +956,22 @@ def convert_document(
                 elif not ocr_available():
                     report.warnings.append(
                         "Das PDF enthält kaum Text, vermutlich ein Scan. "
-                        "Texterkennung ist nur auf dem Mac verfügbar."
+                        "Texterkennung ist auf diesem Computer nicht verfügbar "
+                        "(Mac oder Windows 10/11 nötig)."
                     )
                 else:
                     pages = ocr_pdf(source)
                     report.ocr_pages = len(pages)
                     if not page_markers:
                         pages = [page or "*(kein Text erkannt)*" for page in pages]
-            if not report.ocr_pages and has_tilted_text(source):
+            footnotes = ""
+            layout = None if report.ocr_pages else structured_pdf(source, markdown)
+            if layout is not None:
+                pages = layout.pages
+                report.headings, report.tables = layout.headings, layout.tables
+                report.footnotes = len(layout.footnotes)
+                footnotes = pdf_layout.footnote_section(layout.footnotes)
+            elif not report.ocr_pages and has_tilted_text(source):
                 pages = _pdf_pages_text(source, fix_tilted=True) or pages
             elif pages is None and (page_markers or strip_headers):
                 pages = _pdf_pages_text(source)
@@ -811,6 +980,8 @@ def convert_document(
                 if strip_headers:
                     pages, report.removed_lines = remove_repeating_lines(pages)
                 markdown = join_pages(pages, page_markers=page_markers)
+            if footnotes:
+                markdown = markdown.rstrip() + "\n\n" + footnotes
             markdown = remove_dot_leaders(markdown)
             if report.ocr_pages:
                 markdown = (

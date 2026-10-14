@@ -65,6 +65,9 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller fehlgeschlagen." }
 $AppDir = Join-Path $Dist $AppName
 $Exe = Join-Path $AppDir "$AppName.exe"
 if (-not (Test-Path $Exe)) { throw "EXE nicht gefunden: $Exe" }
+# Texterkennung für Scans: Ohne diese Bausteine wäre die Option in der App ausgegraut.
+$OcrModule = Get-ChildItem -Path $AppDir -Recurse -Filter "_winrt_windows_media_ocr*.pyd" -ErrorAction SilentlyContinue
+if (-not $OcrModule) { throw "Windows-Texterkennung (winrt) fehlt in der App." }
 
 Copy-Item "$Root\packaging\windows\LIESMICH.txt" (Join-Path $AppDir "LIESMICH.txt") -Force
 Copy-Item "$Root\THIRD-PARTY-NOTICES.txt" (Join-Path $AppDir "LIZENZEN.txt") -Force

@@ -11,5 +11,14 @@ markitdown[pdf,docx,pptx,xlsx,xls]>=0.1.0
 pypdfium2>=4.30
 pillow>=10.1
 
-# Texterkennung (OCR) mit Apple Vision, läuft lokal und nur auf dem Mac
+# Texterkennung (OCR), läuft lokal mit dem, was das Betriebssystem mitbringt:
+# Mac: Apple Vision
 ocrmac>=1.0; sys_platform == "darwin"
+# Windows 10/11: eingebaute Windows-Texterkennung (Windows.Media.Ocr)
+winrt-runtime>=3.0; sys_platform == "win32"
+winrt-Windows.Foundation>=3.0; sys_platform == "win32"
+winrt-Windows.Foundation.Collections>=3.0; sys_platform == "win32"
+winrt-Windows.Globalization>=3.0; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging>=3.0; sys_platform == "win32"
+winrt-Windows.Media.Ocr>=3.0; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=3.0; sys_platform == "win32"

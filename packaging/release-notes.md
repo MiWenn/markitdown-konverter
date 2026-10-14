@@ -22,7 +22,8 @@ Kurzfassung:
 
 - Dateien und ganze Ordner ins Fenster ziehen
 - Bilder werden als eigene Dateien gespeichert und im Markdown verlinkt
-- Gescannte PDFs werden mit der Texterkennung von macOS gelesen (nur Mac)
+- PDFs mit Aufbau: Überschriften, Tabellen mit Linien, zweispaltige Seiten in Lesereihenfolge, Fußnoten
+- Gescannte PDFs werden mit der eingebauten Texterkennung gelesen (Mac und Windows 10/11)
 - Profile für schlichtes Markdown, Notiz-Apps wie Obsidian sowie KI & Recherche (mit Seitenangaben)
 - Kopf- und Fußzeilen in PDFs werden entfernt
 - Alles läuft offline auf deinem Computer

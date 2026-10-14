@@ -45,6 +45,19 @@ KNOWN_LICENSES = {
     "pyobjc-framework-quartz": ("MIT", "Copyright (c) Ronald Oussoren and the PyObjC contributors."),
     "pyobjc-framework-vision": ("MIT", "Copyright (c) Ronald Oussoren and the PyObjC contributors."),
 }
+# PyWinRT (Windows-Texterkennung): alle Teilpakete stammen aus einem Projekt.
+_PYWINRT = ("MIT", "Copyright (c) Microsoft Corporation. All rights reserved.\n"
+            "Copyright (c) 2021-2025 David Lechner <david@pybricks.com>")
+for _name_ in (
+    "winrt-runtime",
+    "winrt-windows.foundation",
+    "winrt-windows.foundation.collections",
+    "winrt-windows.globalization",
+    "winrt-windows.graphics.imaging",
+    "winrt-windows.media.ocr",
+    "winrt-windows.storage.streams",
+):
+    KNOWN_LICENSES[_name_] = _PYWINRT
 
 MIT_TEXT = """{holder}
 
