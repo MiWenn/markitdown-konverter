@@ -211,7 +211,7 @@ def _windows_ocr_observations(engine, image) -> list:
     width, height = image.size
     writer = DataWriter()
     writer.write_bytes(bytearray(image.convert("RGBA").tobytes("raw", "BGRA")))
-    bitmap = SoftwareBitmap.create_copy_from_buffer(
+    bitmap = SoftwareBitmap.create_copy_with_alpha_from_buffer(
         writer.detach_buffer(), BitmapPixelFormat.BGRA8, width, height, BitmapAlphaMode.PREMULTIPLIED
     )
 
