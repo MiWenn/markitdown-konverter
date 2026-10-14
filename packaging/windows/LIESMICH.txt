@@ -18,7 +18,9 @@ PDF zu Markdown – von Micky Wenngatz
 
 4. Tipp: Rechtsklick auf die .exe → „An Start anheften“.
 
-Hinweis: Die Texterkennung für gescannte PDFs gibt es nur auf dem Mac.
+Gescannte PDFs liest die App mit der Texterkennung von Windows 10/11.
+Dafür muss Deutsch oder Englisch als Sprache installiert sein
+(Einstellungen → Zeit und Sprache → Sprache).
 
 Ausführliche Anleitung:
 https://github.com/MiWenn/markitdown-konverter/blob/main/ANLEITUNG.md

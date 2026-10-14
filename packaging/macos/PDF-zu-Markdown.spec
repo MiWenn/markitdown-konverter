@@ -64,6 +64,7 @@ datas = []
 binaries = []
 hiddenimports = [
     "converter",
+    "pdf_layout",
     "tkinter",
     "tkinter.filedialog",
     "tkinter.messagebox",

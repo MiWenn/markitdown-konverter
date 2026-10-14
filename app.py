@@ -104,7 +104,7 @@ def _read_version() -> str:
             continue
         if text:
             return text
-    return "2.0.4"
+    return "2.1.0"
 
 
 def about_text() -> str:
@@ -114,7 +114,8 @@ def about_text() -> str:
         f"{APP_WEBSITE.removeprefix('https://')}\n"
         f"Version {_read_version()}\n\n"
         "Wandelt PDF, Word, PowerPoint und Excel auf diesem Computer nach Markdown um, "
-        "samt Bildern und Texterkennung für gescannte PDFs (Mac).\n\n"
+        "samt Bildern, Überschriften, Tabellen, Fußnoten und Texterkennung "
+        "für gescannte PDFs.\n\n"
         "Die Umwandlung nutzt Microsoft MarkItDown — nur lokal, ohne Cloud.\n\n"
         f"© 2026 {APP_AUTHOR}. Freie Software unter der GNU General Public "
         "License Version 3 (GPL-3.0); ohne jede Gewährleistung.\n"
@@ -334,7 +335,7 @@ class ConverterApp(ctk.CTk, _DnDBase):
         ocr_ok = converter.ocr_available()
         self.ocr_var = ctk.BooleanVar(value=ocr_ok)
         option(
-            "Texterkennung für Scans" if ocr_ok else "Texterkennung (nur Mac)",
+            "Texterkennung für Scans" if ocr_ok else "Texterkennung (hier nicht verfügbar)",
             self.ocr_var,
             1,
             0,
@@ -706,6 +707,12 @@ class ConverterApp(ctk.CTk, _DnDBase):
                 details.append(f"{report.ocr_pages} Seite(n) per Texterkennung")
             if report.images:
                 details.append(f"{report.images} Bild(er)")
+            if report.headings:
+                details.append(f"{report.headings} Überschrift(en)")
+            if report.tables:
+                details.append(f"{report.tables} Tabelle(n)")
+            if report.footnotes:
+                details.append(f"{report.footnotes} Fußnote(n)")
             if report.removed_lines:
                 details.append(f"{report.removed_lines} Kopf-/Fußzeile(n) entfernt")
             extra = f"  ({', '.join(details)})" if details else ""
